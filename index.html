@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asignación de Computadoras</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .scanner-container {
+            margin: 20px 0;
+        }
+
+        #scanner {
+            width: 100%;
+            max-width: 400px;
+            height: 300px;
+            border: 3px solid #fff;
+            border-radius: 10px;
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .input-section {
+            margin: 20px 0;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2rem;
+            border: none;
+            border-radius: 10px;
+            text-align: center;
+            margin: 10px 0;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .assignment-result {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .table-assignment {
+            font-size: 4rem;
+            font-weight: bold;
+            margin: 20px 0;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .table-status {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .table-full {
+            background: rgba(255, 107, 107, 0.3);
+            border-color: #ff6b6b;
+        }
+
+        .table-available {
+            background: rgba(46, 213, 115, 0.3);
+            border-color: #2ed573;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            background: rgba(255, 107, 107, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: rgba(46, 213, 115, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        #studentInfo {
+            font-size: 1.2rem;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .table-assignment {
+                font-size: 3rem;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            button {
+                padding: 12px 20px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏫 Asignación de Computadoras</h1>
+        
+        <div class="controls">
+            <button id="startScan" onclick="startScanner()">📱 Iniciar Escáner</button>
+            <button id="stopScan" onclick="stopScanner()" class="hidden">⏹️ Detener Escáner</button>
+            <button onclick="showStatus()">📊 Ver Estado</button>
+            <button onclick="resetSystem()">🔄 Reiniciar Sistema</button>
+        </div>
+
+        <div id="scannerSection" class="hidden">
+            <div id="scanner"></div>
+            <p>Enfoca el código de barras del carné estudiantil</p>
+        </div>
+
+        <div class="input-section">
+            <h3>O ingresa tu número estudiantil:</h3>
+            <input type="text" id="manualInput" placeholder="Número de estudiante" maxlength="20">
+            <br>
+            <button onclick="assignManually()">✅ Asignar Mesa</button>
+        </div>
+
+        <div id="result" class="hidden"></div>
+        <div id="status" class="hidden"></div>
+    </div>
+
+    <script>
+        // Configuración del sistema
+        const TABLES = [
+            { id: 1, computers: 5, assigned: [] },
+            { id: 2, computers: 5, assigned: [] },
+            { id: 3, computers: 5, assigned: [] },
+            { id: 4, computers: 4, assigned: [] },
+            { id: 5, computers: 4, assigned: [] },
+            { id: 6, computers: 4, assigned: [] }
+        ];
+
+        // Almacenamiento en memoria
+        let assignedStudents = {};
+        let isScanning = false;
+
+        // Función para obtener mesas disponibles
+        function getAvailableTables() {
+            return TABLES.filter(table => table.assigned.length < table.computers);
+        }
+
+        // Función para asignar mesa aleatoriamente
+        function assignRandomTable(studentId) {
+            // Verificar si el estudiante ya tiene una mesa asignada
+            if (assignedStudents[studentId]) {
+                return assignedStudents[studentId];
+            }
+
+            const availableTables = getAvailableTables();
+            
+            if (availableTables.length === 0) {
+                throw new Error("Todas las computadoras están ocupadas");
+            }
+
+            // Seleccionar mesa aleatoria de las disponibles
+            const randomIndex = Math.floor(Math.random() * availableTables.length);
+            const selectedTable = availableTables[randomIndex];
+            
+            // Asignar al estudiante
+            selectedTable.assigned.push(studentId);
+            assignedStudents[studentId] = selectedTable.id;
+            
+            return selectedTable.id;
+        }
+
+        // Función para mostrar resultado de asignación
+        function showAssignment(studentId, tableId, isReturning = false) {
+            const resultDiv = document.getElementById('result');
+            const statusText = isReturning ? 'Tu mesa asignada es:' : '¡Mesa asignada!';
+            
+            resultDiv.innerHTML = `
+                <div class="assignment-result">
+                    <h2>${statusText}</h2>
+                    <div class="table-assignment">MESA ${tableId}</div>
+                    <div id="studentInfo">Estudiante: ${studentId}</div>
+                    <p style="margin-top: 20px; font-size: 1.1rem;">
+                        ${isReturning ? 'Dirígete a tu mesa asignada' : 'Dirígete a la mesa asignada y busca una computadora disponible'}
+                    </p>
+                </div>
+            `;
+            resultDiv.classList.remove('hidden');
+            
+            // Limpiar input manual
+            document.getElementById('manualInput').value = '';
+            
+            // Ocultar resultado después de 10 segundos
+            setTimeout(() => {
+                resultDiv.classList.add('hidden');
+            }, 10000);
+        }
+
+        // Función para mostrar error
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="error">${message}</div>`;
+            resultDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                resultDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Función para mostrar éxito
+        function showSuccess(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="success">${message}</div>`;
+            resultDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                resultDiv.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Función para procesar código escaneado o ingresado
+        function processStudent(studentId) {
+            try {
+                studentId = studentId.trim();
+                if (!studentId) {
+                    throw new Error("Número de estudiante no válido");
+                }
+
+                // Verificar si el estudiante ya fue asignado
+                if (assignedStudents[studentId]) {
+                    showAssignment(studentId, assignedStudents[studentId], true);
+                    return;
+                }
+
+                // Asignar nueva mesa
+                const assignedTable = assignRandomTable(studentId);
+                showAssignment(studentId, assignedTable);
+                
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        // Iniciar escáner
+        function startScanner() {
+            const scannerDiv = document.getElementById('scannerSection');
+            
+            // Solicitar permiso de cámara
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    // Detener el stream inmediatamente, Quagga manejará la cámara
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    scannerDiv.classList.remove('hidden');
+                    document.getElementById('startScan').classList.add('hidden');
+                    document.getElementById('stopScan').classList.remove('hidden');
+                    
+                    Quagga.init({
+                        inputStream: {
+                            name: "Live",
+                            type: "LiveStream",
+                            target: document.querySelector('#scanner'),
+                            constraints: {
+                                width: 400,
+                                height: 300,
+                                facingMode: "environment"
+                            },
+                        },
+                        locator: {
+                            patchSize: "medium",
+                            halfSample: true
+                        },
+                        numOfWorkers: 2,
+                        decoder: {
+                            readers: [
+                                "code_128_reader",
+                                "ean_reader",
+                                "ean_8_reader",
+                                "code_39_reader",
+                                "code_39_vin_reader",
+                                "codabar_reader",
+                                "upc_reader",
+                                "upc_e_reader",
+                                "i2of5_reader"
+                            ]
+                        },
+                        locate: true
+                    }, function(err) {
+                        if (err) {
+                            console.error(err);
+                            showError("Error al inicializar la cámara: " + err.message);
+                            return;
+                        }
+                        console.log("Escáner iniciado correctamente");
+                        Quagga.start();
+                        isScanning = true;
+                    });
+
+                    // Event listener para códigos detectados
+                    Quagga.onDetected(function(data) {
+                        if (isScanning) {
+                            const code = data.codeResult.code;
+                            console.log("Código detectado:", code);
+                            processStudent(code);
+                            stopScanner(); // Detener automáticamente después de escanear
+                        }
+                    });
+                })
+                .catch(function(error) {
+                    console.error("Error al acceder a la cámara:", error);
+                    let errorMessage = "No se pudo acceder a la cámara. ";
+                    
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage += "Por favor permite el acceso a la cámara en la configuración de tu navegador. ";
+                        if (navigator.userAgent.includes('Android')) {
+                            errorMessage += "Ve a Configuración → Apps → Navegador → Permisos → Cámara → Permitir";
+                        } else if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+                            errorMessage += "Ve a Configuración → Safari → Cámara → Permitir";
+                        }
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage += "No se encontró ninguna cámara en tu dispositivo.";
+                    } else if (error.name === 'NotSupportedError') {
+                        errorMessage += "Tu navegador no soporta acceso a la cámara.";
+                    } else {
+                        errorMessage += "Error: " + error.message;
+                    }
+                    
+                    errorMessage += " Usa la entrada manual como alternativa.";
+                    showError(errorMessage);
+                });
+        }
+
+        // Detener escáner
+        function stopScanner() {
+            if (Quagga) {
+                Quagga.stop();
+                isScanning = false;
+            }
+            
+            document.getElementById('scannerSection').classList.add('hidden');
+            document.getElementById('startScan').classList.remove('hidden');
+            document.getElementById('stopScan').classList.add('hidden');
+        }
+
+        // Asignación manual
+        function assignManually() {
+            const input = document.getElementById('manualInput');
+            const studentId = input.value.trim();
+            
+            if (!studentId) {
+                showError("Por favor ingresa tu número de estudiante");
+                return;
+            }
+            
+            processStudent(studentId);
+        }
+
+        // Mostrar estado de las mesas
+        function showStatus() {
+            const statusDiv = document.getElementById('status');
+            let statusHTML = '<h3>📊 Estado de las Mesas</h3><div class="status-grid">';
+            
+            TABLES.forEach(table => {
+                const occupied = table.assigned.length;
+                const total = table.computers;
+                const isFull = occupied >= total;
+                const statusClass = isFull ? 'table-full' : 'table-available';
+                
+                statusHTML += `
+                    <div class="table-status ${statusClass}">
+                        <h4>Mesa ${table.id}</h4>
+                        <p>${occupied}/${total} ocupadas</p>
+                        <p>${isFull ? '🔴 Llena' : '🟢 Disponible'}</p>
+                    </div>
+                `;
+            });
+            
+            statusHTML += '</div>';
+            statusHTML += `<p style="margin-top: 20px;"><strong>Total estudiantes asignados: ${Object.keys(assignedStudents).length}</strong></p>`;
+            statusHTML += '<button onclick="hideStatus()" style="margin-top: 15px;">Cerrar Estado</button>';
+            
+            statusDiv.innerHTML = statusHTML;
+            statusDiv.classList.remove('hidden');
+        }
+
+        // Ocultar estado
+        function hideStatus() {
+            document.getElementById('status').classList.add('hidden');
+        }
+
+        // Reiniciar sistema
+        function resetSystem() {
+            if (confirm('¿Estás seguro de que quieres reiniciar el sistema? Esto eliminará todas las asignaciones actuales.')) {
+                // Limpiar todas las asignaciones
+                TABLES.forEach(table => {
+                    table.assigned = [];
+                });
+                assignedStudents = {};
+                
+                // Limpiar interfaz
+                document.getElementById('result').classList.add('hidden');
+                document.getElementById('status').classList.add('hidden');
+                document.getElementById('manualInput').value = '';
+                
+                // Detener escáner si está activo
+                stopScanner();
+                
+                showSuccess("Sistema reiniciado correctamente");
+            }
+        }
+
+        // Permitir envío con Enter en el input manual
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('manualInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    assignManually();
+                }
+            });
+        });
+
+        // Manejar visibilidad de la página (pausar escáner cuando no está visible)
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && isScanning) {
+                stopScanner();
+            }
+        });
+    </script>
+</body>
+</html>
