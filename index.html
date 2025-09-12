@@ -54,6 +54,7 @@
             margin: 20px auto;
             position: relative;
             overflow: hidden;
+            background: #000;
         }
 
         .input-section {
@@ -166,6 +167,15 @@
             margin: 10px 0;
         }
 
+        .debug {
+            background: rgba(255, 193, 7, 0.8);
+            color: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
         #studentInfo {
             font-size: 1.2rem;
             margin: 15px 0;
@@ -200,11 +210,38 @@
                 font-size: 1rem;
             }
         }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid transparent;
+            border-radius: 10px;
+        }
+
+        .scanner-line {
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            width: 80%;
+            height: 2px;
+            background: #00ff00;
+            transform: translateY(-50%);
+            animation: scanLine 2s ease-in-out infinite;
+        }
+
+        @keyframes scanLine {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🏫 Asignación de Computadoras</h1>
+        <h1>🖥️ Asignación de Computadoras</h1>
         
         <div class="controls">
             <button id="startScan" onclick="startScanner()">📱 Iniciar Escáner</button>
@@ -214,14 +251,13 @@
         </div>
 
         <div id="scannerSection" class="hidden">
-            <div id="scanner"></div>
-            <div class="scanner-instructions">
-                📱 <strong>Instrucciones:</strong><br>
-                • Mantén el carné a 15-20cm de distancia<br>
-                • Alinea el código de barras con la línea roja<br>
-                • Asegúrate de tener buena iluminación<br>
-                • El código se leerá automáticamente
+            <div id="scanner">
+                <div class="scanner-overlay">
+                    <div class="scanner-line"></div>
+                </div>
             </div>
+            <p>Enfoca el código de barras del carné estudiantil</p>
+            <p style="font-size: 0.9rem; opacity: 0.8;">Asegúrate de que el código esté bien iluminado y centrado</p>
         </div>
 
         <div class="input-section">
@@ -249,6 +285,13 @@
         // Almacenamiento en memoria
         let assignedStudents = {};
         let isScanning = false;
+        let scannerInitialized = false;
+        let detectionEnabled = true;
+
+        // Log de debug
+        function debugLog(message) {
+            console.log(`[DEBUG] ${new Date().toLocaleTimeString()}: ${message}`);
+        }
 
         // Función para obtener mesas disponibles
         function getAvailableTables() {
@@ -257,12 +300,16 @@
 
         // Función para asignar mesa aleatoriamente
         function assignRandomTable(studentId) {
+            debugLog(`Intentando asignar mesa para estudiante: ${studentId}`);
+            
             // Verificar si el estudiante ya tiene una mesa asignada
             if (assignedStudents[studentId]) {
+                debugLog(`Estudiante ${studentId} ya tiene mesa ${assignedStudents[studentId]}`);
                 return assignedStudents[studentId];
             }
 
             const availableTables = getAvailableTables();
+            debugLog(`Mesas disponibles: ${availableTables.length}`);
             
             if (availableTables.length === 0) {
                 throw new Error("Todas las computadoras están ocupadas");
@@ -276,6 +323,7 @@
             selectedTable.assigned.push(studentId);
             assignedStudents[studentId] = selectedTable.id;
             
+            debugLog(`Estudiante ${studentId} asignado a mesa ${selectedTable.id}`);
             return selectedTable.id;
         }
 
@@ -327,16 +375,30 @@
             }, 3000);
         }
 
+        // Función para mostrar debug
+        function showDebug(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="debug">DEBUG: ${message}</div>`;
+            resultDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                resultDiv.classList.add('hidden');
+            }, 3000);
+        }
+
         // Función para procesar código escaneado o ingresado
         function processStudent(studentId) {
             try {
-                studentId = studentId.trim();
+                studentId = studentId.toString().trim();
+                debugLog(`Procesando estudiante: ${studentId}`);
+                
                 if (!studentId) {
                     throw new Error("Número de estudiante no válido");
                 }
 
                 // Verificar si el estudiante ya fue asignado
                 if (assignedStudents[studentId]) {
+                    debugLog(`Estudiante ${studentId} regresando a mesa ${assignedStudents[studentId]}`);
                     showAssignment(studentId, assignedStudents[studentId], true);
                     return;
                 }
@@ -346,105 +408,172 @@
                 showAssignment(studentId, assignedTable);
                 
             } catch (error) {
+                debugLog(`Error procesando estudiante: ${error.message}`);
                 showError(error.message);
             }
         }
 
-        // Iniciar escáner
+        // Iniciar escáner con configuración mejorada
         function startScanner() {
+            debugLog("Iniciando escáner...");
+            
+            // Verificar si Quagga está disponible
+            if (typeof Quagga === 'undefined') {
+                showError("La librería del escáner no está disponible. Verifica tu conexión a internet.");
+                return;
+            }
+
             const scannerDiv = document.getElementById('scannerSection');
             
             // Solicitar permiso de cámara
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    // Detener el stream inmediatamente, Quagga manejará la cámara
-                    stream.getTracks().forEach(track => track.stop());
-                    
-                    scannerDiv.classList.remove('hidden');
-                    document.getElementById('startScan').classList.add('hidden');
-                    document.getElementById('stopScan').classList.remove('hidden');
-                    
-                    Quagga.init({
-                        inputStream: {
-                            name: "Live",
-                            type: "LiveStream",
-                            target: document.querySelector('#scanner'),
-                            constraints: {
-                                width: 400,
-                                height: 300,
-                                facingMode: "environment"
-                            },
-                        },
-                        locator: {
-                            patchSize: "medium",
-                            halfSample: true
-                        },
-                        numOfWorkers: 2,
-                        decoder: {
-                            readers: [
-                                "code_128_reader",
-                                "ean_reader",
-                                "ean_8_reader",
-                                "code_39_reader",
-                                "code_39_vin_reader",
-                                "codabar_reader",
-                                "upc_reader",
-                                "upc_e_reader",
-                                "i2of5_reader"
-                            ]
-                        },
-                        locate: true
-                    }, function(err) {
-                        if (err) {
-                            console.error(err);
-                            showError("Error al inicializar la cámara: " + err.message);
-                            return;
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "environment",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                } 
+            })
+            .then(function(stream) {
+                debugLog("Acceso a cámara concedido");
+                
+                // Detener el stream inmediatamente, Quagga manejará la cámara
+                stream.getTracks().forEach(track => track.stop());
+                
+                scannerDiv.classList.remove('hidden');
+                document.getElementById('startScan').classList.add('hidden');
+                document.getElementById('stopScan').classList.remove('hidden');
+                
+                // Configuración mejorada de Quagga
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector('#scanner'),
+                        constraints: {
+                            width: { ideal: 640, min: 320 },
+                            height: { ideal: 480, min: 240 },
+                            facingMode: "environment"
                         }
-                        console.log("Escáner iniciado correctamente");
-                        Quagga.start();
-                        isScanning = true;
-                    });
-
-                    // Event listener para códigos detectados
-                    Quagga.onDetected(function(data) {
-                        if (isScanning) {
-                            const code = data.codeResult.code;
-                            console.log("Código detectado:", code);
-                            processStudent(code);
-                            stopScanner(); // Detener automáticamente después de escanear
-                        }
-                    });
-                })
-                .catch(function(error) {
-                    console.error("Error al acceder a la cámara:", error);
-                    let errorMessage = "No se pudo acceder a la cámara. ";
-                    
-                    if (error.name === 'NotAllowedError') {
-                        errorMessage += "Por favor permite el acceso a la cámara en la configuración de tu navegador. ";
-                        if (navigator.userAgent.includes('Android')) {
-                            errorMessage += "Ve a Configuración → Apps → Navegador → Permisos → Cámara → Permitir";
-                        } else if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
-                            errorMessage += "Ve a Configuración → Safari → Cámara → Permitir";
-                        }
-                    } else if (error.name === 'NotFoundError') {
-                        errorMessage += "No se encontró ninguna cámara en tu dispositivo.";
-                    } else if (error.name === 'NotSupportedError') {
-                        errorMessage += "Tu navegador no soporta acceso a la cámara.";
-                    } else {
-                        errorMessage += "Error: " + error.message;
+                    },
+                    locator: {
+                        patchSize: "medium",
+                        halfSample: true
+                    },
+                    numOfWorkers: navigator.hardwareConcurrency || 2,
+                    frequency: 10,
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader", 
+                            "code_39_reader",
+                            "codabar_reader",
+                            "upc_reader",
+                            "i2of5_reader"
+                        ]
+                    },
+                    locate: true
+                }, function(err) {
+                    if (err) {
+                        debugLog(`Error inicializando Quagga: ${err.message}`);
+                        showError("Error al inicializar la cámara: " + err.message);
+                        stopScanner();
+                        return;
                     }
                     
-                    errorMessage += " Usa la entrada manual como alternativa.";
-                    showError(errorMessage);
+                    debugLog("Quagga inicializado correctamente");
+                    Quagga.start();
+                    isScanning = true;
+                    scannerInitialized = true;
+                    detectionEnabled = true;
+                    
+                    showDebug("Escáner activo - Enfoca el código de barras");
                 });
+
+                // Event listeners para códigos detectados
+                Quagga.onProcessed(function(result) {
+                    const drawingCtx = Quagga.canvas.ctx.overlay;
+                    const drawingCanvas = Quagga.canvas.dom.overlay;
+
+                    if (result) {
+                        if (result.boxes) {
+                            drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                            result.boxes.filter(function (box) {
+                                return box !== result.box;
+                            }).forEach(function (box) {
+                                Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                            });
+                        }
+
+                        if (result.box) {
+                            Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                        }
+
+                        if (result.codeResult && result.codeResult.code) {
+                            Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                        }
+                    }
+                });
+
+                Quagga.onDetected(function(data) {
+                    if (isScanning && detectionEnabled && data && data.codeResult) {
+                        const code = data.codeResult.code;
+                        debugLog(`Código detectado: ${code}`);
+                        
+                        // Desactivar temporalmente la detección para evitar múltiples lecturas
+                        detectionEnabled = false;
+                        
+                        processStudent(code);
+                        
+                        // Parar automáticamente después de la detección
+                        setTimeout(() => {
+                            stopScanner();
+                        }, 1000);
+                        
+                        // Reactivar detección después de 3 segundos
+                        setTimeout(() => {
+                            detectionEnabled = true;
+                        }, 3000);
+                    }
+                });
+
+            })
+            .catch(function(error) {
+                debugLog(`Error accediendo a cámara: ${error.name} - ${error.message}`);
+                
+                let errorMessage = "No se pudo acceder a la cámara. ";
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += "Por favor permite el acceso a la cámara en la configuración de tu navegador.";
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage += "No se encontró ninguna cámara en tu dispositivo.";
+                } else if (error.name === 'NotSupportedError') {
+                    errorMessage += "Tu navegador no soporta acceso a la cámara.";
+                } else {
+                    errorMessage += "Error: " + error.message;
+                }
+                
+                errorMessage += " Usa la entrada manual como alternativa.";
+                showError(errorMessage);
+            });
         }
 
         // Detener escáner
         function stopScanner() {
-            if (Quagga) {
-                Quagga.stop();
-                isScanning = false;
+            debugLog("Deteniendo escáner...");
+            
+            if (scannerInitialized && typeof Quagga !== 'undefined') {
+                try {
+                    Quagga.stop();
+                    debugLog("Quagga detenido");
+                } catch (e) {
+                    debugLog(`Error deteniendo Quagga: ${e.message}`);
+                }
             }
+            
+            isScanning = false;
+            scannerInitialized = false;
+            detectionEnabled = false;
             
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
@@ -514,12 +643,15 @@
                 // Detener escáner si está activo
                 stopScanner();
                 
+                debugLog("Sistema reiniciado");
                 showSuccess("Sistema reiniciado correctamente");
             }
         }
 
         // Permitir envío con Enter en el input manual
         document.addEventListener('DOMContentLoaded', function() {
+            debugLog("Sistema inicializado");
+            
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     assignManually();
@@ -527,11 +659,17 @@
             });
         });
 
-        // Manejar visibilidad de la página (pausar escáner cuando no está visible)
+        // Manejar visibilidad de la página
         document.addEventListener('visibilitychange', function() {
             if (document.hidden && isScanning) {
+                debugLog("Página oculta, deteniendo escáner");
                 stopScanner();
             }
+        });
+
+        // Manejar errores globales
+        window.addEventListener('error', function(e) {
+            debugLog(`Error global: ${e.message}`);
         });
     </script>
 </body>
