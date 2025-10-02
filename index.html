@@ -397,7 +397,7 @@
                     
             ],
             // Configuración optimizada
-            patchSize: "small",  // Parches más pequeños para códigos pequeños
+            patchSize: "medium",  // Parches más pequeños para códigos pequeños
             halfSample: false,   // Mayor precisión
             frequency: 15,       // Más intentos por segundo
             debug: true
@@ -583,11 +583,7 @@
                     locate: true,
                     // Configuración específica para carnés pequeños
                     area: {
-                        top: "30%",
-                        right: "15%",
-                        left: "15%",
-                        bottom: "30%"
-                    }
+                        top: "0%", right: "0%", left: "0%", bottom: "0%"
                 };
 
                 Quagga.init(config, function(err) {
