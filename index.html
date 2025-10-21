@@ -231,17 +231,23 @@
         }
 
         .scan-guide::before {
-            content: 'Coloca el código aquí';
+            content: 'Acerca MUCHO el código aquí';
             position: absolute;
             top: -35px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 255, 0, 0.8);
+            background: rgba(255, 255, 0, 0.9);
             padding: 5px 15px;
             border-radius: 5px;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             font-weight: bold;
             color: #000;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
 
         @media (max-width: 600px) {
@@ -312,12 +318,13 @@
 
         <div id="scannerSection" class="hidden">
             <div class="scan-tips">
-                <strong>💡 Tips para mejor lectura:</strong>
+                <strong>💡 Tips para CÓDIGOS MUY PEQUEÑOS:</strong>
                 <ul>
-                    <li>✓ Mantén el carnet quieto y bien iluminado</li>
-                    <li>✓ Coloca el código dentro del recuadro verde</li>
-                    <li>✓ Acerca o aleja el carnet hasta ver el código nítido</li>
-                    <li>✓ Evita reflejos y sombras sobre el código</li>
+                    <li>📱 <strong>ACERCA MUCHO el carné a la cámara</strong></li>
+                    <li>💡 Coloca el código justo debajo de una luz brillante</li>
+                    <li>⏱️ Mantén el carné TOTALMENTE QUIETO por 2-3 segundos</li>
+                    <li>🎯 El código debe ocupar la mayor parte del recuadro verde</li>
+                    <li>🔄 Si no funciona, gira ligeramente el carné</li>
                 </ul>
             </div>
             <div id="scanner">
@@ -355,8 +362,8 @@
         let lastDetectedCode = '';
         let lastDetectionTime = 0;
         let detectionBuffer = [];
-        const DETECTION_THRESHOLD = 3;
-        const DETECTION_CONFIDENCE_MIN = 0.5;
+        const DETECTION_THRESHOLD = 2;
+        const DETECTION_CONFIDENCE_MIN = 0.4;
 
         function debugLog(message) {
             console.log(`[DEBUG] ${new Date().toLocaleTimeString()}: ${message}`);
@@ -497,38 +504,42 @@
                         type: "LiveStream",
                         target: document.querySelector('#scanner'),
                         constraints: {
-                            width: { ideal: 1920, min: 1280 },
-                            height: { ideal: 1080, min: 720 },
+                            width: { ideal: 2560, min: 1920 },
+                            height: { ideal: 1440, min: 1080 },
                             aspectRatio: { ideal: 16/9 },
                             facingMode: "environment",
-                            focusMode: "continuous"
+                            focusMode: "continuous",
+                            zoom: 2.0
                         },
                         area: {
-                            top: "20%",
-                            right: "10%",
-                            left: "10%",
-                            bottom: "20%"
-                        }
+                            top: "35%",
+                            right: "15%",
+                            left: "15%",
+                            bottom: "35%"
+                        },
+                        singleChannel: false
                     },
                     locator: {
-                        patchSize: "small",
-                        halfSample: true
+                        patchSize: "x-large",
+                        halfSample: false,
+                        willReadFrequently: true
                     },
-                    numOfWorkers: navigator.hardwareConcurrency || 4,
-                    frequency: 20,
+                    numOfWorkers: (navigator.hardwareConcurrency || 4),
+                    frequency: 30,
                     decoder: {
                         readers: [
-                            "code_128_reader",
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "code_93_reader",
-                            "codabar_reader",
-                            "i2of5_reader",
-                            "2of5_reader",
+                            {
+                                format: "code_128_reader",
+                                config: {
+                                    supplements: []
+                                }
+                            },
                             "ean_reader",
                             "ean_8_reader",
-                            "upc_reader",
-                            "upc_e_reader"
+                            "code_39_reader",
+                            "i2of5_reader",
+                            "2of5_reader",
+                            "codabar_reader"
                         ],
                         multiple: false
                     },
