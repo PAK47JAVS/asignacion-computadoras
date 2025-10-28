@@ -457,14 +457,14 @@
                     },
                     locator: {
                         patchSize: "small",
-                        halfSample: true
+                        halfSample: false
                     },
                     numOfWorkers: navigator.hardwareConcurrency || 2,
-                    frequency: 10,
+                    frequency: 15,
                     decoder: {
                         readers: [
                             
-                            "code_128_reader",
+                             "code_128_reader",
                             "code_39_reader",
                             "code_39_vin_reader",
                             "code_93_reader",
