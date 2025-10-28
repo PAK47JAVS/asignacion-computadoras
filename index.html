@@ -445,62 +445,55 @@
                 
                 // Configuración mejorada de Quagga
                 Quagga.init({
+ 
                     inputStream: {
                         name: "Live",
                         type: "LiveStream",
                         target: document.querySelector('#scanner'),
                         constraints: {
-                            width: { ideal: 640 },
-                            height: { ideal: 480 },
+                            width: { ideal: 1280, min: 640 },
+                            height: { ideal: 720, min: 480 },
                             facingMode: "environment"
                         }
                     },
+  
                     locator: {
-                        patchSize: "medium",
+                        patchSize: "small",
                         halfSample: false
                     },
                     numOfWorkers: navigator.hardwareConcurrency || 2,
                     frequency: 15,
                     decoder: {
+    
                         readers: [
                             "code_128_reader",
-     
                             "code_39_reader",
-      
                             "code_39_vin_reader",
-      
                             "code_93_reader",
-      
                             "codabar_reader",
-      
                             "i2of5_reader",
-      
                             "2of5_reader",
-      
                             "ean_reader",
-      
                             "ean_8_reader",
-      
                             "upc_reader",
-      
                             "upc_e_reader"
                         ]
                     },
                     locate: true
+
                 }, function(err) {
                     if (err) {
                         debugLog(`Error inicializando Quagga: ${err.message}`);
                         showError("Error al inicializar la cámara: " + err.message);
                         stopScanner();
                         return;
+                        
                     }
-                    
                     debugLog("Quagga inicializado correctamente");
                     Quagga.start();
                     isScanning = true;
                     scannerInitialized = true;
                     detectionEnabled = true;
-                    
                     showDebug("Escáner activo - Enfoca el código de barras");
                 });
 
