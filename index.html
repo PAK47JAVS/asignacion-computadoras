@@ -30,7 +30,7 @@
             padding: 30px;
             box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
             border: 1px solid rgba(255, 255, 255, 0.18);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
             text-align: center;
         }
@@ -47,14 +47,72 @@
 
         #scanner {
             width: 100%;
-            max-width: 400px;
-            height: 300px;
+            max-width: 500px;
+            height: 350px;
             border: 3px solid #fff;
-            border-radius: 10px;
+            border-radius: 15px;
             margin: 20px auto;
             position: relative;
             overflow: hidden;
             background: #000;
+        }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .scan-region {
+            position: absolute;
+            top: 30%;
+            left: 15%;
+            width: 70%;
+            height: 40%;
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ff00, transparent);
+            transform: translateY(-50%);
+            animation: scanMove 2s ease-in-out infinite;
+        }
+
+        @keyframes scanMove {
+            0% { transform: translateY(-50%) translateX(-100%); }
+            50% { transform: translateY(-50%) translateX(0%); }
+            100% { transform: translateY(-50%) translateX(100%); }
+        }
+
+        .scanner-tips {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        .tip-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+
+        .tip-icon {
+            margin-right: 10px;
+            font-size: 1.2rem;
         }
 
         .input-section {
@@ -95,6 +153,36 @@
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .sensitivity-control {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #00ff00;
+            cursor: pointer;
         }
 
         .assignment-result {
@@ -192,6 +280,16 @@
             margin: 20px 0;
         }
 
+        .scan-stats {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
         @media (max-width: 600px) {
             h1 {
                 font-size: 2rem;
@@ -209,33 +307,10 @@
                 padding: 12px 20px;
                 font-size: 1rem;
             }
-        }
 
-        .scanner-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 2px solid transparent;
-            border-radius: 10px;
-        }
-
-        .scanner-line {
-            position: absolute;
-            top: 50%;
-            left: 10%;
-            width: 80%;
-            height: 2px;
-            background: #00ff00;
-            transform: translateY(-50%);
-            animation: scanLine 2s ease-in-out infinite;
-        }
-
-        @keyframes scanLine {
-            0% { opacity: 0.3; }
-            50% { opacity: 1; }
-            100% { opacity: 0.3; }
+            #scanner {
+                height: 280px;
+            }
         }
     </style>
 </head>
@@ -253,11 +328,27 @@
         <div id="scannerSection" class="hidden">
             <div id="scanner">
                 <div class="scanner-overlay">
-                    <div class="scanner-line"></div>
+                    <div class="scan-region">
+                        <div class="scan-line"></div>
+                    </div>
                 </div>
             </div>
-            <p>Enfoca el código de barras del carné estudiantil</p>
-            <p style="font-size: 0.9rem; opacity: 0.8;">Asegúrate de que el código esté bien iluminado y centrado</p>
+            
+            <div class="sensitivity-control">
+                <h4>⚙️ Ajustes de Sensibilidad</h4>
+                <div class="slider-container">
+                    <label>Sensibilidad: <span id="sensitivityValue">5</span>/10</label>
+                    <input type="range" min="1" max="10" value="5" class="slider" id="sensitivitySlider" onchange="updateSensitivity(this.value)">
+                </div>
+            </div>
+
+            <div class="scan-stats">
+                <span>Intentos: <span id="scanAttempts">0</span></span>
+                <span>Detectados: <span id="codesDetected">0</span></span>
+                <span>FPS: <span id="fps">0</span></span>
+            </div>
+
+
         </div>
 
         <div class="input-section">
@@ -282,27 +373,78 @@
             { id: 6, computers: 4, assigned: [] }
         ];
 
-        // Almacenamiento en memoria
+        // Variables del escáner optimizadas para carnés
         let assignedStudents = {};
         let isScanning = false;
         let scannerInitialized = false;
         let detectionEnabled = true;
+        let sensitivity = 5;
+        let scanAttempts = 0;
+        let codesDetected = 0;
+        let lastFPS = 0;
+        let detectionCooldown = false;
 
-        // Log de debug
+        // Configuración específica para carnés estudiantiles
+        const CARNET_CONFIG = {
+            // Tipos de códigos más comunes en carnés
+            readers: [
+                "code_128_reader",
+    
+                "code_39_reader",
+    
+                "code_39_vin_reader",
+    
+                "code_93_reader",
+    
+                "codabar_reader",
+   
+                "i2of5_reader",
+    
+                "2of5_reader",
+    
+                "ean_reader",
+    
+                "ean_8_reader",
+    
+                "upc_reader",
+    
+                "upc_e_reader"    // Interleaved 2 of 5, usado en algunos carnés
+            ],
+            // Configuración optimizada
+            patchSize: "small",  // Parches más pequeños para códigos pequeños
+            halfSample: false,   // Mayor precisión
+            frequency: 15,       // Más intentos por segundo
+            debug: true
+        };
+
         function debugLog(message) {
             console.log(`[DEBUG] ${new Date().toLocaleTimeString()}: ${message}`);
         }
 
-        // Función para obtener mesas disponibles
+        function updateSensitivity(value) {
+            sensitivity = parseInt(value);
+            document.getElementById('sensitivityValue').textContent = sensitivity;
+            
+            if (isScanning) {
+                // Reiniciar escáner con nueva configuración
+                stopScanner();
+                setTimeout(() => startScanner(), 500);
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('scanAttempts').textContent = scanAttempts;
+            document.getElementById('codesDetected').textContent = codesDetected;
+            document.getElementById('fps').textContent = lastFPS;
+        }
+
         function getAvailableTables() {
             return TABLES.filter(table => table.assigned.length < table.computers);
         }
 
-        // Función para asignar mesa aleatoriamente
         function assignRandomTable(studentId) {
             debugLog(`Intentando asignar mesa para estudiante: ${studentId}`);
             
-            // Verificar si el estudiante ya tiene una mesa asignada
             if (assignedStudents[studentId]) {
                 debugLog(`Estudiante ${studentId} ya tiene mesa ${assignedStudents[studentId]}`);
                 return assignedStudents[studentId];
@@ -315,11 +457,9 @@
                 throw new Error("Todas las computadoras están ocupadas");
             }
 
-            // Seleccionar mesa aleatoria de las disponibles
             const randomIndex = Math.floor(Math.random() * availableTables.length);
             const selectedTable = availableTables[randomIndex];
             
-            // Asignar al estudiante
             selectedTable.assigned.push(studentId);
             assignedStudents[studentId] = selectedTable.id;
             
@@ -327,7 +467,6 @@
             return selectedTable.id;
         }
 
-        // Función para mostrar resultado de asignación
         function showAssignment(studentId, tableId, isReturning = false) {
             const resultDiv = document.getElementById('result');
             const statusText = isReturning ? 'Tu mesa asignada es:' : '¡Mesa asignada!';
@@ -344,16 +483,13 @@
             `;
             resultDiv.classList.remove('hidden');
             
-            // Limpiar input manual
             document.getElementById('manualInput').value = '';
             
-            // Ocultar resultado después de 10 segundos
             setTimeout(() => {
                 resultDiv.classList.add('hidden');
             }, 10000);
         }
 
-        // Función para mostrar error
         function showError(message) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `<div class="error">${message}</div>`;
@@ -364,7 +500,6 @@
             }, 5000);
         }
 
-        // Función para mostrar éxito
         function showSuccess(message) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `<div class="success">${message}</div>`;
@@ -375,7 +510,6 @@
             }, 3000);
         }
 
-        // Función para mostrar debug
         function showDebug(message) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `<div class="debug">DEBUG: ${message}</div>`;
@@ -386,24 +520,22 @@
             }, 3000);
         }
 
-        // Función para procesar código escaneado o ingresado
         function processStudent(studentId) {
             try {
-                studentId = studentId.toString().trim();
+                // Limpiar y validar el código
+                studentId = studentId.toString().trim().replace(/[^a-zA-Z0-9]/g, '');
                 debugLog(`Procesando estudiante: ${studentId}`);
                 
-                if (!studentId) {
-                    throw new Error("Número de estudiante no válido");
+                if (!studentId || studentId.length < 3) {
+                    throw new Error("Número de estudiante no válido o muy corto");
                 }
 
-                // Verificar si el estudiante ya fue asignado
                 if (assignedStudents[studentId]) {
                     debugLog(`Estudiante ${studentId} regresando a mesa ${assignedStudents[studentId]}`);
                     showAssignment(studentId, assignedStudents[studentId], true);
                     return;
                 }
 
-                // Asignar nueva mesa
                 const assignedTable = assignRandomTable(studentId);
                 showAssignment(studentId, assignedTable);
                 
@@ -413,11 +545,9 @@
             }
         }
 
-        // Iniciar escáner con configuración mejorada
         function startScanner() {
-            debugLog("Iniciando escáner...");
+            debugLog("Iniciando escáner optimizado para carnés...");
             
-            // Verificar si Quagga está disponible
             if (typeof Quagga === 'undefined') {
                 showError("La librería del escáner no está disponible. Verifica tu conexión a internet.");
                 return;
@@ -425,26 +555,24 @@
 
             const scannerDiv = document.getElementById('scannerSection');
             
-            // Solicitar permiso de cámara
             navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: "environment",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
+                    width: { ideal: 1280, min: 640 },
+                    height: { ideal: 720, min: 480 }
                 } 
             })
             .then(function(stream) {
-                debugLog("Acceso a cámara concedido");
+                debugLog("Acceso a cámara concedido - Configurando para carnés estudiantiles");
                 
-                // Detener el stream inmediatamente, Quagga manejará la cámara
                 stream.getTracks().forEach(track => track.stop());
                 
                 scannerDiv.classList.remove('hidden');
                 document.getElementById('startScan').classList.add('hidden');
                 document.getElementById('stopScan').classList.remove('hidden');
                 
-                // Configuración mejorada de Quagga
-                Quagga.init({
+                // Configuración específicamente optimizada para carnés
+                const config = {
                     inputStream: {
                         name: "Live",
                         type: "LiveStream",
@@ -456,30 +584,27 @@
                         }
                     },
                     locator: {
-                        patchSize: "small",
-                        halfSample: false
+                        patchSize: CARNET_CONFIG.patchSize,
+                        halfSample: CARNET_CONFIG.halfSample
                     },
-                    numOfWorkers: navigator.hardwareConcurrency || 2,
-                    frequency: 15,
+                    numOfWorkers: Math.max(navigator.hardwareConcurrency || 2, 2),
+                    frequency: CARNET_CONFIG.frequency,
                     decoder: {
-                        readers: [
-                            
-                             "code_128_reader",
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "code_93_reader",
-                            "codabar_reader",
-                            "i2of5_reader",
-                            "2of5_reader",
-                            "ean_reader",
-                            "ean_8_reader",
-                            "upc_reader",
-                            "upc_e_reader"
-                        
-                        ]
+                        readers: CARNET_CONFIG.readers,
+                        // Configuración adicional para mejorar detección
+                        multiple: false
                     },
-                    locate: true
-                }, function(err) {
+                    locate: true,
+                    // Configuración específica para carnés pequeños
+                    area: {
+                        top: "30%",
+                        right: "15%",
+                        left: "15%",
+                        bottom: "30%"
+                    }
+                };
+
+                Quagga.init(config, function(err) {
                     if (err) {
                         debugLog(`Error inicializando Quagga: ${err.message}`);
                         showError("Error al inicializar la cámara: " + err.message);
@@ -487,70 +612,83 @@
                         return;
                     }
                     
-                    debugLog("Quagga inicializado correctamente");
+                    debugLog("Quagga inicializado para carnés estudiantiles");
                     Quagga.start();
                     isScanning = true;
                     scannerInitialized = true;
                     detectionEnabled = true;
+                    scanAttempts = 0;
+                    codesDetected = 0;
                     
-                    showDebug("Escáner activo - Enfoca el código de barras");
+                    showDebug("Escáner activo - Coloca el carné en el área verde");
                 });
 
-  // 📡 Cuando detecta un código
-  Quagga.onDetected(function(result) {
-    if (result && result.codeResult && result.codeResult.code) {
-      const codigo = result.codeResult.code.trim();
-      debugLog(`Código detectado: ${codigo}`);
-      procesarCodigoDetectado(codigo);
-    }
-  });
-}
-
-
-                // Event listeners para códigos detectados
+                // Procesamiento mejorado para carnés
                 Quagga.onProcessed(function(result) {
+                    scanAttempts++;
+                    updateStats();
+
                     const drawingCtx = Quagga.canvas.ctx.overlay;
                     const drawingCanvas = Quagga.canvas.dom.overlay;
 
                     if (result) {
+                        // FPS tracking
+                        lastFPS = Math.round(1000 / (result.timestamp || 66));
+
                         if (result.boxes) {
                             drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                            
+                            // Dibujar cajas de detección con diferentes colores
                             result.boxes.filter(function (box) {
                                 return box !== result.box;
                             }).forEach(function (box) {
-                                Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                                Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "yellow", lineWidth: 2});
                             });
                         }
 
                         if (result.box) {
-                            Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                            Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 3});
                         }
 
                         if (result.codeResult && result.codeResult.code) {
-                            Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                            Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 4});
                         }
                     }
                 });
 
+                // Detección mejorada con filtrado para carnés
                 Quagga.onDetected(function(data) {
-                    if (isScanning && detectionEnabled && data && data.codeResult) {
+                    if (isScanning && detectionEnabled && !detectionCooldown && data && data.codeResult) {
                         const code = data.codeResult.code;
-                        debugLog(`Código detectado: ${code}`);
+                        const format = data.codeResult.format;
                         
-                        // Desactivar temporalmente la detección para evitar múltiples lecturas
-                        detectionEnabled = false;
+                        codesDetected++;
+                        updateStats();
                         
-                        processStudent(code);
+                        debugLog(`Código detectado: ${code} (Formato: ${format})`);
                         
-                        // Parar automáticamente después de la detección
+                        // Validar que el código sea probable de un carné estudiantil
+                        if (code && code.length >= 3 && code.length <= 20) {
+                            // Activar cooldown para evitar múltiples lecturas
+                            detectionCooldown = true;
+                            detectionEnabled = false;
+                            
+                            processStudent(code);
+                            
+                            // Detener automáticamente después de detección exitosa
+                            setTimeout(() => {
+                                stopScanner();
+                            }, 1000);
+                            
+                        } else {
+                            debugLog(`Código ignorado por formato inválido: ${code}`);
+                        }
+                        
+                        // Reactivar detección después de cooldown
                         setTimeout(() => {
-                            stopScanner();
-                        }, 1000);
-                        
-                        // Reactivar detección después de 3 segundos
-                        setTimeout(() => {
+                            detectionCooldown = false;
                             detectionEnabled = true;
-                        }, 3000);
+                        }, 2000);
                     }
                 });
 
@@ -561,11 +699,9 @@
                 let errorMessage = "No se pudo acceder a la cámara. ";
                 
                 if (error.name === 'NotAllowedError') {
-                    errorMessage += "Por favor permite el acceso a la cámara en la configuración de tu navegador.";
+                    errorMessage += "Por favor permite el acceso a la cámara.";
                 } else if (error.name === 'NotFoundError') {
-                    errorMessage += "No se encontró ninguna cámara en tu dispositivo.";
-                } else if (error.name === 'NotSupportedError') {
-                    errorMessage += "Tu navegador no soporta acceso a la cámara.";
+                    errorMessage += "No se encontró ninguna cámara.";
                 } else {
                     errorMessage += "Error: " + error.message;
                 }
@@ -575,7 +711,6 @@
             });
         }
 
-        // Detener escáner
         function stopScanner() {
             debugLog("Deteniendo escáner...");
             
@@ -591,13 +726,13 @@
             isScanning = false;
             scannerInitialized = false;
             detectionEnabled = false;
+            detectionCooldown = false;
             
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
             document.getElementById('stopScan').classList.add('hidden');
         }
 
-        // Asignación manual
         function assignManually() {
             const input = document.getElementById('manualInput');
             const studentId = input.value.trim();
@@ -610,7 +745,6 @@
             processStudent(studentId);
         }
 
-        // Mostrar estado de las mesas
         function showStatus() {
             const statusDiv = document.getElementById('status');
             let statusHTML = '<h3>📊 Estado de las Mesas</h3><div class="status-grid">';
@@ -638,26 +772,21 @@
             statusDiv.classList.remove('hidden');
         }
 
-        // Ocultar estado
         function hideStatus() {
             document.getElementById('status').classList.add('hidden');
         }
 
-        // Reiniciar sistema
         function resetSystem() {
             if (confirm('¿Estás seguro de que quieres reiniciar el sistema? Esto eliminará todas las asignaciones actuales.')) {
-                // Limpiar todas las asignaciones
                 TABLES.forEach(table => {
                     table.assigned = [];
                 });
                 assignedStudents = {};
                 
-                // Limpiar interfaz
                 document.getElementById('result').classList.add('hidden');
                 document.getElementById('status').classList.add('hidden');
                 document.getElementById('manualInput').value = '';
                 
-                // Detener escáner si está activo
                 stopScanner();
                 
                 debugLog("Sistema reiniciado");
@@ -665,9 +794,9 @@
             }
         }
 
-        // Permitir envío con Enter en el input manual
+        // Event listeners
         document.addEventListener('DOMContentLoaded', function() {
-            debugLog("Sistema inicializado");
+            debugLog("Sistema inicializado para carnés estudiantiles");
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -676,7 +805,6 @@
             });
         });
 
-        // Manejar visibilidad de la página
         document.addEventListener('visibilitychange', function() {
             if (document.hidden && isScanning) {
                 debugLog("Página oculta, deteniendo escáner");
@@ -684,7 +812,6 @@
             }
         });
 
-        // Manejar errores globales
         window.addEventListener('error', function(e) {
             debugLog(`Error global: ${e.message}`);
         });
