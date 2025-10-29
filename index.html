@@ -451,32 +451,24 @@
                         type: "LiveStream",
                         target: document.querySelector('#scanner'),
                         constraints: {
-                            width: { ideal: 1280, min: 640 },
-                            height: { ideal: 720, min: 480 },
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
                             facingMode: "environment"
                         }
                     },
-  
+                    
                     locator: {
-                        patchSize: "large",
+                        patchSize: "medium",
                         halfSample: true
                     },
                     numOfWorkers: navigator.hardwareConcurrency || 2,
-                    frequency: 10,
+                    frequency: 30,
                     decoder: {
     
                         readers: [
                             "code_128_reader",
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "code_93_reader",
-                            "codabar_reader",
-                            "i2of5_reader",
-                            "2of5_reader",
-                            "ean_reader",
-                            "ean_8_reader",
-                            "upc_reader",
-                            "upc_e_reader"
+                            "code_39_reader"
+                            
                         ]
                     },
                     locate: true
@@ -498,7 +490,7 @@
                 });
 
                 // Event listeners para códigos detectados
-                Quagga.onProcessed(function(result) {
+                /*Quagga.onProcessed(function(result) {
                     const drawingCtx = Quagga.canvas.ctx.overlay;
                     const drawingCanvas = Quagga.canvas.dom.overlay;
 
@@ -520,7 +512,7 @@
                             Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
                         }
                     }
-                });
+                });*/
 
                 Quagga.onDetected(function(data) {
                     if (isScanning && detectionEnabled && data && data.codeResult) {
