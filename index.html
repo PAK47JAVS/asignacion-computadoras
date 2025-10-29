@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Asignación de Computadoras</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/index.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         * {
             margin: 0;
@@ -508,9 +508,10 @@
         async function startScanner() {
             debugLog("Iniciando escáner ZXing...");
             
-            // Verificar si ZXing está disponible
-            if (typeof ZXing === 'undefined') {
+            // Verificar si ZXing está disponible - checar múltiples formas de importación
+            if (typeof ZXing === 'undefined' && typeof window.ZXing === 'undefined') {
                 showError("La librería ZXing no está disponible. Verifica tu conexión a internet.");
+                console.error("ZXing no encontrado. Objeto window:", Object.keys(window).filter(k => k.includes('ZX') || k.includes('zx')));
                 return;
             }
 
@@ -523,8 +524,9 @@
                 document.getElementById('startScan').classList.add('hidden');
                 document.getElementById('stopScan').classList.remove('hidden');
                 
-                // Crear instancia del lector de códigos
-                codeReader = new ZXing.BrowserMultiFormatReader();
+                // Crear instancia del lector de códigos - probar diferentes formas
+                const ZXingLib = window.ZXing || ZXing;
+                codeReader = new ZXingLib.BrowserMultiFormatReader();
                 
                 debugLog("ZXing BrowserMultiFormatReader creado");
                 
