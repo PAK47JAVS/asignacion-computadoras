@@ -41,10 +41,6 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
-        .scanner-container {
-            margin: 20px 0;
-        }
-
         #scanner {
             width: 100%;
             max-width: 400px;
@@ -95,6 +91,26 @@
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .big-assign-button {
+            background: linear-gradient(45deg, #2ed573, #26de81);
+            font-size: 1.5rem;
+            padding: 25px 50px;
+            margin: 30px auto;
+            display: block;
+            width: 90%;
+            max-width: 400px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 8px 25px rgba(46, 213, 115, 0.4);
+        }
+
+        .big-assign-button:hover {
+            background: linear-gradient(45deg, #26de81, #20bf6b);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(46, 213, 115, 0.6);
         }
 
         .assignment-result {
@@ -167,15 +183,6 @@
             margin: 10px 0;
         }
 
-        .debug {
-            background: rgba(255, 193, 7, 0.8);
-            color: #333;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 0.9rem;
-        }
-
         #studentInfo {
             font-size: 1.2rem;
             margin: 15px 0;
@@ -209,6 +216,11 @@
                 padding: 12px 20px;
                 font-size: 1rem;
             }
+
+            .big-assign-button {
+                font-size: 1.2rem;
+                padding: 20px 40px;
+            }
         }
 
         .scanner-overlay {
@@ -237,12 +249,34 @@
             50% { opacity: 1; }
             100% { opacity: 0.3; }
         }
+
+        .scan-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(46, 213, 115, 0.9);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
         
+        <button class="big-assign-button" onclick="assignRandomStudent()">
+            🎲 ASIGNAR PC AL AZAR
+        </button>
+
         <div class="controls">
             <button id="startScan" onclick="startScanner()">📱 Iniciar Escáner</button>
             <button id="stopScan" onclick="stopScanner()" class="hidden">⏹️ Detener Escáner</button>
@@ -254,15 +288,16 @@
             <div id="scanner">
                 <div class="scanner-overlay">
                     <div class="scanner-line"></div>
+                    <div class="scan-indicator">🔍 ESCANEANDO...</div>
                 </div>
             </div>
             <p>Enfoca el código de barras del carné estudiantil</p>
-            <p style="font-size: 0.9rem; opacity: 0.8;">Asegúrate de que el código esté bien iluminado y centrado</p>
+            <p style="font-size: 0.9rem; opacity: 0.8;">Mantén el código horizontal y bien iluminado</p>
         </div>
 
         <div class="input-section">
             <h3>O ingresa tu número estudiantil:</h3>
-            <input type="text" id="manualInput" placeholder="Número de estudiante" maxlength="20">
+            <input type="text" id="manualInput" placeholder="Número de estudiante" maxlength="50">
             <br>
             <button onclick="assignManually()">✅ Asignar Mesa</button>
         </div>
@@ -282,52 +317,78 @@
             { id: 6, computers: 4, assigned: [] }
         ];
 
-        // Almacenamiento en memoria
+        // Variables del sistema
         let assignedStudents = {};
         let isScanning = false;
         let scannerInitialized = false;
         let detectionEnabled = true;
+        let lastScannedCode = null;
+        let lastScanTime = 0;
 
         // Log de debug
         function debugLog(message) {
-            console.log(`[DEBUG] ${new Date().toLocaleTimeString()}: ${message}`);
+            console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
         }
 
-        // Función para obtener mesas disponibles
+        // Obtener mesas disponibles con balanceo de carga
         function getAvailableTables() {
-            return TABLES.filter(table => table.assigned.length < table.computers);
+            const available = TABLES.filter(table => table.assigned.length < table.computers);
+            
+            // Ordenar por menor ocupación para balancear la carga
+            return available.sort((a, b) => {
+                const occupancyA = a.assigned.length / a.computers;
+                const occupancyB = b.assigned.length / b.computers;
+                return occupancyA - occupancyB;
+            });
         }
 
-        // Función para asignar mesa aleatoriamente
+        // Asignar mesa con estrategia de balanceo
         function assignRandomTable(studentId) {
-            debugLog(`Intentando asignar mesa para estudiante: ${studentId}`);
+            debugLog(`Asignando mesa para: ${studentId}`);
             
             // Verificar si el estudiante ya tiene una mesa asignada
             if (assignedStudents[studentId]) {
-                debugLog(`Estudiante ${studentId} ya tiene mesa ${assignedStudents[studentId]}`);
+                debugLog(`Estudiante ya asignado a mesa ${assignedStudents[studentId]}`);
                 return assignedStudents[studentId];
             }
 
             const availableTables = getAvailableTables();
-            debugLog(`Mesas disponibles: ${availableTables.length}`);
             
             if (availableTables.length === 0) {
                 throw new Error("Todas las computadoras están ocupadas");
             }
 
-            // Seleccionar mesa aleatoria de las disponibles
-            const randomIndex = Math.floor(Math.random() * availableTables.length);
-            const selectedTable = availableTables[randomIndex];
+            // Elegir entre las mesas menos ocupadas para balancear
+            const minOccupancy = Math.min(...availableTables.map(t => t.assigned.length));
+            const leastOccupiedTables = availableTables.filter(t => t.assigned.length === minOccupancy);
+            const randomIndex = Math.floor(Math.random() * leastOccupiedTables.length);
+            const selectedTable = leastOccupiedTables[randomIndex];
             
             // Asignar al estudiante
             selectedTable.assigned.push(studentId);
             assignedStudents[studentId] = selectedTable.id;
             
-            debugLog(`Estudiante ${studentId} asignado a mesa ${selectedTable.id}`);
+            debugLog(`Mesa ${selectedTable.id} asignada`);
             return selectedTable.id;
         }
 
-        // Función para mostrar resultado de asignación
+        // Asignar estudiante aleatorio
+        function assignRandomStudent() {
+            try {
+                const timestamp = Date.now();
+                const random = Math.floor(Math.random() * 10000);
+                const studentId = `EST-${timestamp}-${random}`;
+                
+                const assignedTable = assignRandomTable(studentId);
+                showAssignment(studentId, assignedTable, false);
+                
+            } catch (error) {
+                debugLog(`Error: ${error.message}`);
+                showError(error.message);
+            }
+        }
+
+        // Mostrar resultado de asignación
         function showAssignment(studentId, tableId, isReturning = false) {
             const resultDiv = document.getElementById('result');
             const statusText = isReturning ? 'Tu mesa asignada es:' : '¡Mesa asignada!';
@@ -347,13 +408,13 @@
             // Limpiar input manual
             document.getElementById('manualInput').value = '';
             
-            // Ocultar resultado después de 10 segundos
+            // Ocultar resultado después de 8 segundos
             setTimeout(() => {
                 resultDiv.classList.add('hidden');
-            }, 10000);
+            }, 8000);
         }
 
-        // Función para mostrar error
+        // Mostrar error
         function showError(message) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `<div class="error">${message}</div>`;
@@ -364,7 +425,7 @@
             }, 5000);
         }
 
-        // Función para mostrar éxito
+        // Mostrar éxito
         function showSuccess(message) {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = `<div class="success">${message}</div>`;
@@ -375,30 +436,21 @@
             }, 3000);
         }
 
-        // Función para mostrar debug
-        function showDebug(message) {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = `<div class="debug">DEBUG: ${message}</div>`;
-            resultDiv.classList.remove('hidden');
-            
-            setTimeout(() => {
-                resultDiv.classList.add('hidden');
-            }, 3000);
-        }
-
-        // Función para procesar código escaneado o ingresado
+        // Procesar estudiante
         function processStudent(studentId) {
             try {
                 studentId = studentId.toString().trim();
-                debugLog(`Procesando estudiante: ${studentId}`);
                 
-                if (!studentId) {
+                if (!studentId || studentId.length === 0) {
                     throw new Error("Número de estudiante no válido");
+                }
+
+                if (studentId.length > 50) {
+                    throw new Error("Número de estudiante demasiado largo");
                 }
 
                 // Verificar si el estudiante ya fue asignado
                 if (assignedStudents[studentId]) {
-                    debugLog(`Estudiante ${studentId} regresando a mesa ${assignedStudents[studentId]}`);
                     showAssignment(studentId, assignedStudents[studentId], true);
                     return;
                 }
@@ -408,16 +460,15 @@
                 showAssignment(studentId, assignedTable);
                 
             } catch (error) {
-                debugLog(`Error procesando estudiante: ${error.message}`);
+                debugLog(`Error: ${error.message}`);
                 showError(error.message);
             }
         }
 
-        // Iniciar escáner con configuración mejorada
+        // Iniciar escáner optimizado para códigos 1D
         function startScanner() {
             debugLog("Iniciando escáner...");
             
-            // Verificar si Quagga está disponible
             if (typeof Quagga === 'undefined') {
                 showError("La librería del escáner no está disponible. Verifica tu conexión a internet.");
                 return;
@@ -425,134 +476,124 @@
 
             const scannerDiv = document.getElementById('scannerSection');
             
-            // Solicitar permiso de cámara
             navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: "environment",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 } 
             })
             .then(function(stream) {
                 debugLog("Acceso a cámara concedido");
-                
-                // Detener el stream inmediatamente, Quagga manejará la cámara
                 stream.getTracks().forEach(track => track.stop());
                 
                 scannerDiv.classList.remove('hidden');
                 document.getElementById('startScan').classList.add('hidden');
                 document.getElementById('stopScan').classList.remove('hidden');
                 
-                // Configuración mejorada de Quagga
+                // Configuración optimizada para códigos 1D (Code 128 y Code 39)
                 Quagga.init({
- 
                     inputStream: {
                         name: "Live",
                         type: "LiveStream",
                         target: document.querySelector('#scanner'),
                         constraints: {
-                            width: { ideal: 640 },
-                            height: { ideal: 480 },
-                            facingMode: "environment"
+                            width: { min: 640, ideal: 1280 },
+                            height: { min: 480, ideal: 720 },
+                            facingMode: "environment",
+                            aspectRatio: { min: 1, max: 2 }
+                        },
+                        area: {
+                            top: "20%",
+                            right: "10%",
+                            left: "10%",
+                            bottom: "20%"
                         }
                     },
-                    
                     locator: {
-                        patchSize: "medium",
-                        halfSample: true
+                        patchSize: "large",
+                        halfSample: false
                     },
-                    numOfWorkers: navigator.hardwareConcurrency || 2,
-                    frequency: 30,
+                    numOfWorkers: navigator.hardwareConcurrency || 4,
+                    frequency: 10,
                     decoder: {
-    
                         readers: [
                             "code_128_reader",
-                            "code_39_reader"
-                            
-                        ]
+                            "code_39_reader",
+                            "code_39_vin_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "upc_reader",
+                            "upc_e_reader"
+                        ],
+                        multiple: false
                     },
-                    locate: true
-
+                    locate: true,
+                    debug: false
                 }, function(err) {
                     if (err) {
                         debugLog(`Error inicializando Quagga: ${err.message}`);
                         showError("Error al inicializar la cámara: " + err.message);
                         stopScanner();
                         return;
-                        
                     }
-                    debugLog("Quagga inicializado correctamente");
+                    debugLog("Escáner iniciado correctamente");
                     Quagga.start();
                     isScanning = true;
                     scannerInitialized = true;
                     detectionEnabled = true;
-                    showDebug("Escáner activo - Enfoca el código de barras");
                 });
 
-                // Event listeners para códigos detectados
-                /*Quagga.onProcessed(function(result) {
-                    const drawingCtx = Quagga.canvas.ctx.overlay;
-                    const drawingCanvas = Quagga.canvas.dom.overlay;
-
-                    if (result) {
-                        if (result.boxes) {
-                            drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
-                            result.boxes.filter(function (box) {
-                                return box !== result.box;
-                            }).forEach(function (box) {
-                                Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
-                            });
-                        }
-
-                        if (result.box) {
-                            Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
-                        }
-
-                        if (result.codeResult && result.codeResult.code) {
-                            Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
-                        }
-                    }
-                });*/
-
+                // Detectar códigos de barras
                 Quagga.onDetected(function(data) {
-                    if (isScanning && detectionEnabled && data && data.codeResult) {
-                        const code = data.codeResult.code;
-                        debugLog(`Código detectado: ${code}`);
-                        
-                        // Desactivar temporalmente la detección para evitar múltiples lecturas
-                        detectionEnabled = false;
-                        
-                        processStudent(code);
-                        
-                        // Parar automáticamente después de la detección
-                        setTimeout(() => {
-                            stopScanner();
-                        }, 1000);
-                        
-                        // Reactivar detección después de 3 segundos
-                        setTimeout(() => {
-                            detectionEnabled = true;
-                        }, 3000);
+                    if (!isScanning || !detectionEnabled || !data || !data.codeResult) {
+                        return;
                     }
-                });
 
+                    const code = data.codeResult.code;
+                    const currentTime = Date.now();
+                    
+                    // Evitar lecturas duplicadas (debounce de 2 segundos)
+                    if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
+                        return;
+                    }
+                    
+                    lastScannedCode = code;
+                    lastScanTime = currentTime;
+                    
+                    debugLog(`Código detectado: ${code}`);
+                    
+                    // Desactivar temporalmente la detección
+                    detectionEnabled = false;
+                    
+                    processStudent(code);
+                    
+                    // Parar escáner después de la detección
+                    setTimeout(() => {
+                        stopScanner();
+                    }, 500);
+                    
+                    // Reactivar detección después de 3 segundos
+                    setTimeout(() => {
+                        detectionEnabled = true;
+                        lastScannedCode = null;
+                    }, 3000);
+                });
             })
             .catch(function(error) {
-                debugLog(`Error accediendo a cámara: ${error.name} - ${error.message}`);
+                debugLog(`Error de cámara: ${error.name} - ${error.message}`);
                 
                 let errorMessage = "No se pudo acceder a la cámara. ";
                 
                 if (error.name === 'NotAllowedError') {
-                    errorMessage += "Por favor permite el acceso a la cámara en la configuración de tu navegador.";
+                    errorMessage += "Por favor permite el acceso a la cámara.";
                 } else if (error.name === 'NotFoundError') {
-                    errorMessage += "No se encontró ninguna cámara en tu dispositivo.";
-                } else if (error.name === 'NotSupportedError') {
-                    errorMessage += "Tu navegador no soporta acceso a la cámara.";
+                    errorMessage += "No se encontró cámara en el dispositivo.";
                 } else {
                     errorMessage += "Error: " + error.message;
                 }
                 
-                errorMessage += " Usa la entrada manual como alternativa.";
+                errorMessage += " Usa la entrada manual.";
                 showError(errorMessage);
             });
         }
@@ -564,9 +605,9 @@
             if (scannerInitialized && typeof Quagga !== 'undefined') {
                 try {
                     Quagga.stop();
-                    debugLog("Quagga detenido");
+                    debugLog("Escáner detenido");
                 } catch (e) {
-                    debugLog(`Error deteniendo Quagga: ${e.message}`);
+                    debugLog(`Error deteniendo escáner: ${e.message}`);
                 }
             }
             
@@ -595,7 +636,18 @@
         // Mostrar estado de las mesas
         function showStatus() {
             const statusDiv = document.getElementById('status');
-            let statusHTML = '<h3>📊 Estado de las Mesas</h3><div class="status-grid">';
+            const totalCapacity = TABLES.reduce((sum, table) => sum + table.computers, 0);
+            const totalOccupied = Object.keys(assignedStudents).length;
+            
+            let statusHTML = `
+                <h3>📊 Estado de las Mesas</h3>
+                <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px; margin: 15px 0;">
+                    <p><strong>Total Capacidad:</strong> ${totalCapacity} computadoras</p>
+                    <p><strong>Ocupadas:</strong> ${totalOccupied}</p>
+                    <p><strong>Disponibles:</strong> ${totalCapacity - totalOccupied}</p>
+                </div>
+                <div class="status-grid">
+            `;
             
             TABLES.forEach(table => {
                 const occupied = table.assigned.length;
@@ -612,9 +664,10 @@
                 `;
             });
             
-            statusHTML += '</div>';
-            statusHTML += `<p style="margin-top: 20px;"><strong>Total estudiantes asignados: ${Object.keys(assignedStudents).length}</strong></p>`;
-            statusHTML += '<button onclick="hideStatus()" style="margin-top: 15px;">Cerrar Estado</button>';
+            statusHTML += `
+                </div>
+                <button onclick="hideStatus()" style="margin-top: 15px;">Cerrar</button>
+            `;
             
             statusDiv.innerHTML = statusHTML;
             statusDiv.classList.remove('hidden');
@@ -627,19 +680,16 @@
 
         // Reiniciar sistema
         function resetSystem() {
-            if (confirm('¿Estás seguro de que quieres reiniciar el sistema? Esto eliminará todas las asignaciones actuales.')) {
-                // Limpiar todas las asignaciones
+            if (confirm('¿Reiniciar el sistema? Se eliminarán todas las asignaciones.')) {
                 TABLES.forEach(table => {
                     table.assigned = [];
                 });
                 assignedStudents = {};
                 
-                // Limpiar interfaz
                 document.getElementById('result').classList.add('hidden');
                 document.getElementById('status').classList.add('hidden');
                 document.getElementById('manualInput').value = '';
                 
-                // Detener escáner si está activo
                 stopScanner();
                 
                 debugLog("Sistema reiniciado");
@@ -647,9 +697,9 @@
             }
         }
 
-        // Permitir envío con Enter en el input manual
+        // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
-            debugLog("Sistema inicializado");
+            debugLog("Sistema inicializado - Capacidad: 27 computadoras");
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -658,17 +708,11 @@
             });
         });
 
-        // Manejar visibilidad de la página
+        // Detener escáner al ocultar página
         document.addEventListener('visibilitychange', function() {
             if (document.hidden && isScanning) {
-                debugLog("Página oculta, deteniendo escáner");
                 stopScanner();
             }
-        });
-
-        // Manejar errores globales
-        window.addEventListener('error', function(e) {
-            debugLog(`Error global: ${e.message}`);
         });
     </script>
 </body>
