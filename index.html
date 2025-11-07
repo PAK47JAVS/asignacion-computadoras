@@ -274,11 +274,11 @@
         <h1>🖥️ Asignación de Computadoras</h1>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
-            🎲 ASIGNAR AL AZAR
+            🎲 ASIGNAR 
         </button>
 
         <div class="controls">
-            <button id="startScan" onclick="startScanner()">📱 Escáner</button>
+            <button id="startScan" onclick="startScanner()">📱 Iniciar Escáner</button>
             <button id="stopScan" onclick="stopScanner()" class="hidden">⏹️ Detener Escáner</button>
             <button onclick="showStatus()">📊 Ver Estado</button>
             <button onclick="resetSystem()">🔄 Reiniciar Sistema</button>
@@ -324,6 +324,7 @@
         let detectionEnabled = true;
         let lastScannedCode = null;
         let lastScanTime = 0;
+        let resultTimeout = null;
 
         // Log de debug
         function debugLog(message) {
@@ -393,6 +394,12 @@
             const resultDiv = document.getElementById('result');
             const statusText = isReturning ? 'Tu mesa asignada es:' : '¡Mesa asignada!';
             
+            // Limpiar timeout anterior si existe
+            if (resultTimeout) {
+                clearTimeout(resultTimeout);
+                resultTimeout = null;
+            }
+            
             resultDiv.innerHTML = `
                 <div class="assignment-result">
                     <h2>${statusText}</h2>
@@ -408,31 +415,48 @@
             // Limpiar input manual
             document.getElementById('manualInput').value = '';
             
-            // Ocultar resultado después de 8 segundos
-            setTimeout(() => {
+            // Crear nuevo timeout
+            resultTimeout = setTimeout(() => {
                 resultDiv.classList.add('hidden');
+                resultTimeout = null;
             }, 8000);
         }
 
         // Mostrar error
         function showError(message) {
             const resultDiv = document.getElementById('result');
+            
+            // Limpiar timeout anterior si existe
+            if (resultTimeout) {
+                clearTimeout(resultTimeout);
+                resultTimeout = null;
+            }
+            
             resultDiv.innerHTML = `<div class="error">${message}</div>`;
             resultDiv.classList.remove('hidden');
             
-            setTimeout(() => {
+            resultTimeout = setTimeout(() => {
                 resultDiv.classList.add('hidden');
+                resultTimeout = null;
             }, 5000);
         }
 
         // Mostrar éxito
         function showSuccess(message) {
             const resultDiv = document.getElementById('result');
+            
+            // Limpiar timeout anterior si existe
+            if (resultTimeout) {
+                clearTimeout(resultTimeout);
+                resultTimeout = null;
+            }
+            
             resultDiv.innerHTML = `<div class="success">${message}</div>`;
             resultDiv.classList.remove('hidden');
             
-            setTimeout(() => {
+            resultTimeout = setTimeout(() => {
                 resultDiv.classList.add('hidden');
+                resultTimeout = null;
             }, 3000);
         }
 
