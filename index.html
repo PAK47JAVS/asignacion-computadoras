@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asignación de Computadoras - ZXing</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/index.min.js"></script>
+    <title>Asignación de Computadoras - html5-qrcode</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -52,15 +52,12 @@
             margin-bottom: 20px;
         }
 
-        #video {
+        #reader {
             width: 100%;
             max-width: 400px;
-            height: 300px;
-            border: 3px solid #fff;
-            border-radius: 10px;
             margin: 20px auto;
-            background: #000;
-            object-fit: cover;
+            border-radius: 10px;
+            overflow: hidden;
         }
 
         .input-section {
@@ -209,22 +206,6 @@
             margin: 20px 0;
         }
 
-        .scan-indicator {
-            background: rgba(46, 213, 115, 0.9);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            margin: 10px 0;
-            animation: blink 1.5s infinite;
-        }
-
-        @keyframes blink {
-            0%, 50%, 100% { opacity: 1; }
-            25%, 75% { opacity: 0.5; }
-        }
-
         @media (max-width: 600px) {
             h1 {
                 font-size: 2rem;
@@ -253,7 +234,7 @@
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
-        <div class="library-tag">📚 ZXing-JS v0.20.0</div>
+        <div class="library-tag">📚 html5-qrcode v2.3.8</div>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
             🎲 ASIGNAR PC AL AZAR
@@ -266,11 +247,7 @@
             <button onclick="resetSystem()">🔄 Reiniciar Sistema</button>
         </div>
 
-        <div id="scannerSection" class="hidden">
-            <video id="video" playsinline></video>
-            <div class="scan-indicator">🔍 ESCANEANDO...</div>
-            <p>Enfoca el código de barras del carné estudiantil</p>
-        </div>
+        <div id="reader" class="hidden"></div>
 
         <div class="input-section">
             <h3>O ingresa tu número estudiantil:</h3>
@@ -296,7 +273,7 @@
 
         // Variables del sistema
         let assignedStudents = {};
-        let codeReader = null;
+        let html5QrcodeScanner = null;
         let isScanning = false;
         let resultTimeout = null;
         let lastScannedCode = null;
@@ -445,100 +422,84 @@
             }
         }
 
-        async function startScanner() {
-            debugLog("Iniciando escáner ZXing...");
+        function startScanner() {
+            debugLog("Iniciando escáner html5-qrcode...");
             
-            if (typeof ZXing === 'undefined') {
-                showError("La librería ZXing no está disponible. Verifica tu conexión.");
+            if (typeof Html5Qrcode === 'undefined') {
+                showError("La librería html5-qrcode no está disponible. Verifica tu conexión.");
                 return;
             }
 
-            try {
-                const videoElement = document.getElementById('video');
-                const scannerSection = document.getElementById('scannerSection');
-                
-                scannerSection.classList.remove('hidden');
-                document.getElementById('startScan').classList.add('hidden');
-                document.getElementById('stopScan').classList.remove('hidden');
+            const readerDiv = document.getElementById('reader');
+            readerDiv.classList.remove('hidden');
+            
+            document.getElementById('startScan').classList.add('hidden');
+            document.getElementById('stopScan').classList.remove('hidden');
 
-                // Crear reader con hints para códigos 1D
-                const hints = new Map();
-                const formats = [
-                    ZXing.BarcodeFormat.CODE_128,
-                    ZXing.BarcodeFormat.CODE_39,
-                    ZXing.BarcodeFormat.EAN_13,
-                    ZXing.BarcodeFormat.EAN_8,
-                    ZXing.BarcodeFormat.UPC_A,
-                    ZXing.BarcodeFormat.UPC_E
-                ];
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 150 },
+                aspectRatio: 1.777778,
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E
+                ]
+            };
 
-                codeReader = new ZXing.BrowserMultiFormatReader(hints);
-                
-                const devices = await codeReader.listVideoInputDevices();
-                debugLog(`Cámaras encontradas: ${devices.length}`);
-                
-                if (devices.length === 0) {
-                    throw new Error("No se encontró ninguna cámara");
-                }
+            html5QrcodeScanner = new Html5Qrcode("reader");
 
-                // Preferir cámara trasera
-                const backCamera = devices.find(device => 
-                    device.label.toLowerCase().includes('back') || 
-                    device.label.toLowerCase().includes('rear') ||
-                    device.label.toLowerCase().includes('trasera')
-                );
-                const selectedDevice = backCamera || devices[0];
-
-                isScanning = true;
-
-                codeReader.decodeFromVideoDevice(
-                    selectedDevice.deviceId,
-                    videoElement,
-                    (result, error) => {
-                        if (result) {
-                            const code = result.getText();
-                            const currentTime = Date.now();
-                            
-                            // Evitar lecturas duplicadas
-                            if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
-                                return;
-                            }
-                            
-                            lastScannedCode = code;
-                            lastScanTime = currentTime;
-                            
-                            debugLog(`Código detectado: ${code}`);
-                            processStudent(code);
-                            
-                            // Detener después de lectura exitosa
-                            setTimeout(() => {
-                                stopScanner();
-                            }, 500);
-                        }
+            html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText, decodedResult) => {
+                    const currentTime = Date.now();
+                    
+                    // Evitar lecturas duplicadas
+                    if (decodedText === lastScannedCode && (currentTime - lastScanTime) < 2000) {
+                        return;
                     }
-                );
-
-                debugLog("Escáner ZXing iniciado");
-
-            } catch (error) {
-                debugLog(`Error: ${error.message}`);
-                showError(`No se pudo acceder a la cámara: ${error.message}. Usa la entrada manual.`);
+                    
+                    lastScannedCode = decodedText;
+                    lastScanTime = currentTime;
+                    
+                    debugLog(`Código detectado: ${decodedText}`);
+                    processStudent(decodedText);
+                    
+                    // Detener escáner después de lectura exitosa
+                    setTimeout(() => {
+                        stopScanner();
+                    }, 500);
+                },
+                (errorMessage) => {
+                    // Ignorar errores de escaneo normal
+                }
+            ).catch((err) => {
+                debugLog(`Error iniciando escáner: ${err}`);
+                showError("No se pudo acceder a la cámara. Usa la entrada manual.");
                 stopScanner();
-            }
+            });
+
+            isScanning = true;
         }
 
         function stopScanner() {
             debugLog("Deteniendo escáner...");
             
-            if (codeReader && isScanning) {
-                codeReader.reset();
-                debugLog("Escáner detenido");
+            if (html5QrcodeScanner && isScanning) {
+                html5QrcodeScanner.stop().then(() => {
+                    html5QrcodeScanner.clear();
+                    debugLog("Escáner detenido");
+                }).catch((err) => {
+                    debugLog(`Error deteniendo escáner: ${err}`);
+                });
             }
             
             isScanning = false;
-            document.getElementById('scannerSection').classList.add('hidden');
+            document.getElementById('reader').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
             document.getElementById('stopScan').classList.add('hidden');
         }
@@ -617,7 +578,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            debugLog("Sistema ZXing inicializado");
+            debugLog("Sistema html5-qrcode inicializado");
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
