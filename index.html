@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asignación de Computadoras</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <title>Asignación de Computadoras - Barcode Detection API</title>
     <style>
         * {
             margin: 0;
@@ -37,20 +36,51 @@
 
         h1 {
             font-size: 2.5rem;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
-        #scanner {
+        .library-tag {
+            background: rgba(46, 213, 115, 0.8);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .library-tag.native {
+            background: rgba(255, 193, 7, 0.8);
+        }
+
+        #videoContainer {
+            position: relative;
             width: 100%;
             max-width: 400px;
             height: 300px;
+            margin: 20px auto;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
             border: 3px solid #fff;
             border-radius: 10px;
-            margin: 20px auto;
-            position: relative;
-            overflow: hidden;
             background: #000;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
 
         .input-section {
@@ -183,6 +213,15 @@
             margin: 10px 0;
         }
 
+        .warning {
+            background: rgba(255, 193, 7, 0.8);
+            color: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
         #studentInfo {
             font-size: 1.2rem;
             margin: 15px 0;
@@ -197,6 +236,22 @@
             justify-content: center;
             gap: 10px;
             margin: 20px 0;
+        }
+
+        .scan-indicator {
+            background: rgba(46, 213, 115, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin: 10px 0;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
         }
 
         @media (max-width: 600px) {
@@ -222,59 +277,15 @@
                 padding: 20px 40px;
             }
         }
-
-        .scanner-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 2px solid transparent;
-            border-radius: 10px;
-        }
-
-        .scanner-line {
-            position: absolute;
-            top: 50%;
-            left: 10%;
-            width: 80%;
-            height: 2px;
-            background: #00ff00;
-            transform: translateY(-50%);
-            animation: scanLine 2s ease-in-out infinite;
-        }
-
-        @keyframes scanLine {
-            0% { opacity: 0.3; }
-            50% { opacity: 1; }
-            100% { opacity: 0.3; }
-        }
-
-        .scan-indicator {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(46, 213, 115, 0.9);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            animation: blink 1.5s infinite;
-        }
-
-        @keyframes blink {
-            0%, 50%, 100% { opacity: 1; }
-            25%, 75% { opacity: 0.5; }
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
+        <div class="library-tag native">⚡ Barcode Detection API (Nativa)</div>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
-            🎲 ASIGNAR 
+            🎲 ASIGNAR PC AL AZAR
         </button>
 
         <div class="controls">
@@ -285,14 +296,12 @@
         </div>
 
         <div id="scannerSection" class="hidden">
-            <div id="scanner">
-                <div class="scanner-overlay">
-                    <div class="scanner-line"></div>
-                    <div class="scan-indicator">🔍 ESCANEANDO...</div>
-                </div>
+            <div id="videoContainer">
+                <video id="video" playsinline autoplay></video>
+                <canvas id="canvas"></canvas>
             </div>
+            <div class="scan-indicator">🔍 ESCANEANDO...</div>
             <p>Enfoca el código de barras del carné estudiantil</p>
-            <p style="font-size: 0.9rem; opacity: 0.8;">Mantén el código horizontal y bien iluminado</p>
         </div>
 
         <div class="input-section">
@@ -319,23 +328,20 @@
 
         // Variables del sistema
         let assignedStudents = {};
+        let stream = null;
+        let barcodeDetector = null;
         let isScanning = false;
-        let scannerInitialized = false;
-        let detectionEnabled = true;
+        let scanningInterval = null;
+        let resultTimeout = null;
         let lastScannedCode = null;
         let lastScanTime = 0;
-        let resultTimeout = null;
 
-        // Log de debug
         function debugLog(message) {
             console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
         }
 
-        // Obtener mesas disponibles con balanceo de carga
         function getAvailableTables() {
             const available = TABLES.filter(table => table.assigned.length < table.computers);
-            
-            // Ordenar por menor ocupación para balancear la carga
             return available.sort((a, b) => {
                 const occupancyA = a.assigned.length / a.computers;
                 const occupancyB = b.assigned.length / b.computers;
@@ -343,11 +349,9 @@
             });
         }
 
-        // Asignar mesa con estrategia de balanceo
         function assignRandomTable(studentId) {
             debugLog(`Asignando mesa para: ${studentId}`);
             
-            // Verificar si el estudiante ya tiene una mesa asignada
             if (assignedStudents[studentId]) {
                 debugLog(`Estudiante ya asignado a mesa ${assignedStudents[studentId]}`);
                 return assignedStudents[studentId];
@@ -359,13 +363,11 @@
                 throw new Error("Todas las computadoras están ocupadas");
             }
 
-            // Elegir entre las mesas menos ocupadas para balancear
             const minOccupancy = Math.min(...availableTables.map(t => t.assigned.length));
             const leastOccupiedTables = availableTables.filter(t => t.assigned.length === minOccupancy);
             const randomIndex = Math.floor(Math.random() * leastOccupiedTables.length);
             const selectedTable = leastOccupiedTables[randomIndex];
             
-            // Asignar al estudiante
             selectedTable.assigned.push(studentId);
             assignedStudents[studentId] = selectedTable.id;
             
@@ -373,7 +375,6 @@
             return selectedTable.id;
         }
 
-        // Asignar estudiante aleatorio
         function assignRandomStudent() {
             try {
                 const timestamp = Date.now();
@@ -389,12 +390,10 @@
             }
         }
 
-        // Mostrar resultado de asignación
         function showAssignment(studentId, tableId, isReturning = false) {
             const resultDiv = document.getElementById('result');
             const statusText = isReturning ? 'Tu mesa asignada es:' : '¡Mesa asignada!';
             
-            // Limpiar timeout anterior si existe
             if (resultTimeout) {
                 clearTimeout(resultTimeout);
                 resultTimeout = null;
@@ -412,21 +411,17 @@
             `;
             resultDiv.classList.remove('hidden');
             
-            // Limpiar input manual
             document.getElementById('manualInput').value = '';
             
-            // Crear nuevo timeout
             resultTimeout = setTimeout(() => {
                 resultDiv.classList.add('hidden');
                 resultTimeout = null;
             }, 8000);
         }
 
-        // Mostrar error
         function showError(message) {
             const resultDiv = document.getElementById('result');
             
-            // Limpiar timeout anterior si existe
             if (resultTimeout) {
                 clearTimeout(resultTimeout);
                 resultTimeout = null;
@@ -441,11 +436,9 @@
             }, 5000);
         }
 
-        // Mostrar éxito
         function showSuccess(message) {
             const resultDiv = document.getElementById('result');
             
-            // Limpiar timeout anterior si existe
             if (resultTimeout) {
                 clearTimeout(resultTimeout);
                 resultTimeout = null;
@@ -460,7 +453,23 @@
             }, 3000);
         }
 
-        // Procesar estudiante
+        function showWarning(message) {
+            const resultDiv = document.getElementById('result');
+            
+            if (resultTimeout) {
+                clearTimeout(resultTimeout);
+                resultTimeout = null;
+            }
+            
+            resultDiv.innerHTML = `<div class="warning">${message}</div>`;
+            resultDiv.classList.remove('hidden');
+            
+            resultTimeout = setTimeout(() => {
+                resultDiv.classList.add('hidden');
+                resultTimeout = null;
+            }, 7000);
+        }
+
         function processStudent(studentId) {
             try {
                 studentId = studentId.toString().trim();
@@ -473,13 +482,11 @@
                     throw new Error("Número de estudiante demasiado largo");
                 }
 
-                // Verificar si el estudiante ya fue asignado
                 if (assignedStudents[studentId]) {
                     showAssignment(studentId, assignedStudents[studentId], true);
                     return;
                 }
 
-                // Asignar nueva mesa
                 const assignedTable = assignRandomTable(studentId);
                 showAssignment(studentId, assignedTable);
                 
@@ -489,124 +496,121 @@
             }
         }
 
-        // Iniciar escáner optimizado para códigos 1D
-        function startScanner() {
-            debugLog("Iniciando escáner...");
+        async function checkBarcodeDetectorSupport() {
+            if (!('BarcodeDetector' in window)) {
+                debugLog("Barcode Detection API no soportada");
+                return false;
+            }
+
+            try {
+                const formats = await BarcodeDetector.getSupportedFormats();
+                debugLog(`Formatos soportados: ${formats.join(', ')}`);
+                return formats.length > 0;
+            } catch (error) {
+                debugLog(`Error verificando soporte: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function startScanner() {
+            debugLog("Iniciando escáner nativo...");
+
+            // Verificar soporte
+            const isSupported = await checkBarcodeDetectorSupport();
             
-            if (typeof Quagga === 'undefined') {
-                showError("La librería del escáner no está disponible. Verifica tu conexión a internet.");
+            if (!isSupported) {
+                showWarning(
+                    "⚠️ Tu navegador no soporta la Barcode Detection API nativa. " +
+                    "Esta API solo funciona en Chrome/Edge (v83+). " +
+                    "Por favor usa la entrada manual o prueba con otra versión del escáner."
+                );
                 return;
             }
 
-            const scannerDiv = document.getElementById('scannerSection');
-            
-            navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
-            })
-            .then(function(stream) {
-                debugLog("Acceso a cámara concedido");
-                stream.getTracks().forEach(track => track.stop());
+            try {
+                const videoElement = document.getElementById('video');
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+                const scannerSection = document.getElementById('scannerSection');
                 
-                scannerDiv.classList.remove('hidden');
+                scannerSection.classList.remove('hidden');
                 document.getElementById('startScan').classList.add('hidden');
                 document.getElementById('stopScan').classList.remove('hidden');
-                
-                // Configuración optimizada para códigos 1D (Code 128 y Code 39)
-                Quagga.init({
-                    inputStream: {
-                        name: "Live",
-                        type: "LiveStream",
-                        target: document.querySelector('#scanner'),
-                        constraints: {
-                            width: { min: 640, ideal: 1280 },
-                            height: { min: 480, ideal: 720 },
-                            facingMode: "environment",
-                            aspectRatio: { min: 1, max: 2 }
-                        },
-                        area: {
-                            top: "20%",
-                            right: "10%",
-                            left: "10%",
-                            bottom: "20%"
+
+                // Solicitar acceso a cámara
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                videoElement.srcObject = stream;
+                await videoElement.play();
+
+                // Ajustar canvas al tamaño del video
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+
+                // Crear detector con formatos 1D
+                barcodeDetector = new BarcodeDetector({
+                    formats: [
+                        'code_128',
+                        'code_39',
+                        'ean_13',
+                        'ean_8',
+                        'upc_a',
+                        'upc_e'
+                    ]
+                });
+
+                isScanning = true;
+                debugLog("Escáner nativo iniciado");
+
+                // Escanear continuamente
+                scanningInterval = setInterval(async () => {
+                    if (!isScanning) return;
+
+                    try {
+                        const barcodes = await barcodeDetector.detect(videoElement);
+                        
+                        if (barcodes.length > 0) {
+                            const barcode = barcodes[0];
+                            const code = barcode.rawValue;
+                            const currentTime = Date.now();
+
+                            // Dibujar detección en canvas
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.strokeStyle = '#00ff00';
+                            ctx.lineWidth = 4;
+                            
+                            const { x, y, width, height } = barcode.boundingBox;
+                            ctx.strokeRect(x, y, width, height);
+
+                            // Evitar lecturas duplicadas
+                            if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
+                                return;
+                            }
+                            
+                            lastScannedCode = code;
+                            lastScanTime = currentTime;
+                            
+                            debugLog(`Código detectado: ${code} (${barcode.format})`);
+                            processStudent(code);
+                            
+                            // Detener después de lectura exitosa
+                            setTimeout(() => {
+                                stopScanner();
+                            }, 500);
                         }
-                    },
-                    locator: {
-                        patchSize: "large",
-                        halfSample: false
-                    },
-                    numOfWorkers: navigator.hardwareConcurrency || 4,
-                    frequency: 10,
-                    decoder: {
-                        readers: [
-                            "code_128_reader",
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "ean_reader",
-                            "ean_8_reader",
-                            "upc_reader",
-                            "upc_e_reader"
-                        ],
-                        multiple: false
-                    },
-                    locate: true,
-                    debug: false
-                }, function(err) {
-                    if (err) {
-                        debugLog(`Error inicializando Quagga: ${err.message}`);
-                        showError("Error al inicializar la cámara: " + err.message);
-                        stopScanner();
-                        return;
+                    } catch (error) {
+                        // Ignorar errores de detección individuales
                     }
-                    debugLog("Escáner iniciado correctamente");
-                    Quagga.start();
-                    isScanning = true;
-                    scannerInitialized = true;
-                    detectionEnabled = true;
-                });
+                }, 100); // Escanear cada 100ms
 
-                // Detectar códigos de barras
-                Quagga.onDetected(function(data) {
-                    if (!isScanning || !detectionEnabled || !data || !data.codeResult) {
-                        return;
-                    }
-
-                    const code = data.codeResult.code;
-                    const currentTime = Date.now();
-                    
-                    // Evitar lecturas duplicadas (debounce de 2 segundos)
-                    if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
-                        return;
-                    }
-                    
-                    lastScannedCode = code;
-                    lastScanTime = currentTime;
-                    
-                    debugLog(`Código detectado: ${code}`);
-                    
-                    // Desactivar temporalmente la detección
-                    detectionEnabled = false;
-                    
-                    processStudent(code);
-                    
-                    // Parar escáner después de la detección
-                    setTimeout(() => {
-                        stopScanner();
-                    }, 500);
-                    
-                    // Reactivar detección después de 3 segundos
-                    setTimeout(() => {
-                        detectionEnabled = true;
-                        lastScannedCode = null;
-                    }, 3000);
-                });
-            })
-            .catch(function(error) {
-                debugLog(`Error de cámara: ${error.name} - ${error.message}`);
-                
+            } catch (error) {
+                debugLog(`Error: ${error.message}`);
                 let errorMessage = "No se pudo acceder a la cámara. ";
                 
                 if (error.name === 'NotAllowedError') {
@@ -614,37 +618,43 @@
                 } else if (error.name === 'NotFoundError') {
                     errorMessage += "No se encontró cámara en el dispositivo.";
                 } else {
-                    errorMessage += "Error: " + error.message;
+                    errorMessage += error.message;
                 }
                 
-                errorMessage += " Usa la entrada manual.";
-                showError(errorMessage);
-            });
+                showError(errorMessage + " Usa la entrada manual.");
+                stopScanner();
+            }
         }
 
-        // Detener escáner
         function stopScanner() {
             debugLog("Deteniendo escáner...");
             
-            if (scannerInitialized && typeof Quagga !== 'undefined') {
-                try {
-                    Quagga.stop();
-                    debugLog("Escáner detenido");
-                } catch (e) {
-                    debugLog(`Error deteniendo escáner: ${e.message}`);
-                }
-            }
-            
             isScanning = false;
-            scannerInitialized = false;
-            detectionEnabled = false;
+
+            if (scanningInterval) {
+                clearInterval(scanningInterval);
+                scanningInterval = null;
+            }
+
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+
+            const videoElement = document.getElementById('video');
+            videoElement.srcObject = null;
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
             document.getElementById('stopScan').classList.add('hidden');
+
+            debugLog("Escáner detenido");
         }
 
-        // Asignación manual
         function assignManually() {
             const input = document.getElementById('manualInput');
             const studentId = input.value.trim();
@@ -657,7 +667,6 @@
             processStudent(studentId);
         }
 
-        // Mostrar estado de las mesas
         function showStatus() {
             const statusDiv = document.getElementById('status');
             const totalCapacity = TABLES.reduce((sum, table) => sum + table.computers, 0);
@@ -697,12 +706,10 @@
             statusDiv.classList.remove('hidden');
         }
 
-        // Ocultar estado
         function hideStatus() {
             document.getElementById('status').classList.add('hidden');
         }
 
-        // Reiniciar sistema
         function resetSystem() {
             if (confirm('¿Reiniciar el sistema? Se eliminarán todas las asignaciones.')) {
                 TABLES.forEach(table => {
@@ -721,9 +728,14 @@
             }
         }
 
-        // Inicialización
-        document.addEventListener('DOMContentLoaded', function() {
-            debugLog("Sistema inicializado - Capacidad: 27 computadoras");
+        document.addEventListener('DOMContentLoaded', async function() {
+            const isSupported = await checkBarcodeDetectorSupport();
+            
+            if (isSupported) {
+                debugLog("Sistema Barcode Detection API inicializado - API nativa soportada ✓");
+            } else {
+                debugLog("Sistema iniciado - Barcode Detection API NO soportada (solo Chrome/Edge)");
+            }
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
@@ -732,7 +744,6 @@
             });
         });
 
-        // Detener escáner al ocultar página
         document.addEventListener('visibilitychange', function() {
             if (document.hidden && isScanning) {
                 stopScanner();
