@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asignación de Computadoras - Barcode Detection API</title>
+    <title>Asignación de Computadoras - ZXing</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/index.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -51,36 +52,15 @@
             margin-bottom: 20px;
         }
 
-        .library-tag.native {
-            background: rgba(255, 193, 7, 0.8);
-        }
-
-        #videoContainer {
-            position: relative;
+        #video {
             width: 100%;
             max-width: 400px;
             height: 300px;
-            margin: 20px auto;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        #video {
-            width: 100%;
-            height: 100%;
             border: 3px solid #fff;
             border-radius: 10px;
+            margin: 20px auto;
             background: #000;
             object-fit: cover;
-        }
-
-        #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
         }
 
         .input-section {
@@ -213,15 +193,6 @@
             margin: 10px 0;
         }
 
-        .warning {
-            background: rgba(255, 193, 7, 0.8);
-            color: #333;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 0.9rem;
-        }
-
         #studentInfo {
             font-size: 1.2rem;
             margin: 15px 0;
@@ -282,7 +253,7 @@
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
-        <div class="library-tag native">⚡ Barcode Detection API (Nativa)</div>
+        <div class="library-tag">📚 ZXing-JS v0.20.0</div>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
             🎲 ASIGNAR PC AL AZAR
@@ -296,10 +267,7 @@
         </div>
 
         <div id="scannerSection" class="hidden">
-            <div id="videoContainer">
-                <video id="video" playsinline autoplay></video>
-                <canvas id="canvas"></canvas>
-            </div>
+            <video id="video" playsinline></video>
             <div class="scan-indicator">🔍 ESCANEANDO...</div>
             <p>Enfoca el código de barras del carné estudiantil</p>
         </div>
@@ -328,10 +296,8 @@
 
         // Variables del sistema
         let assignedStudents = {};
-        let stream = null;
-        let barcodeDetector = null;
+        let codeReader = null;
         let isScanning = false;
-        let scanningInterval = null;
         let resultTimeout = null;
         let lastScannedCode = null;
         let lastScanTime = 0;
@@ -453,23 +419,6 @@
             }, 3000);
         }
 
-        function showWarning(message) {
-            const resultDiv = document.getElementById('result');
-            
-            if (resultTimeout) {
-                clearTimeout(resultTimeout);
-                resultTimeout = null;
-            }
-            
-            resultDiv.innerHTML = `<div class="warning">${message}</div>`;
-            resultDiv.classList.remove('hidden');
-            
-            resultTimeout = setTimeout(() => {
-                resultDiv.classList.add('hidden');
-                resultTimeout = null;
-            }, 7000);
-        }
-
         function processStudent(studentId) {
             try {
                 studentId = studentId.toString().trim();
@@ -496,98 +445,62 @@
             }
         }
 
-        async function checkBarcodeDetectorSupport() {
-            if (!('BarcodeDetector' in window)) {
-                debugLog("Barcode Detection API no soportada");
-                return false;
-            }
-
-            try {
-                const formats = await BarcodeDetector.getSupportedFormats();
-                debugLog(`Formatos soportados: ${formats.join(', ')}`);
-                return formats.length > 0;
-            } catch (error) {
-                debugLog(`Error verificando soporte: ${error.message}`);
-                return false;
-            }
-        }
-
         async function startScanner() {
-            debugLog("Iniciando escáner nativo...");
-
-            // Verificar soporte
-            const isSupported = await checkBarcodeDetectorSupport();
+            debugLog("Iniciando escáner ZXing...");
             
-            if (!isSupported) {
-                showWarning(
-                    "⚠️ Tu navegador no soporta la Barcode Detection API nativa. " +
-                    "Esta API solo funciona en Chrome/Edge (v83+). " +
-                    "Por favor usa la entrada manual o prueba con otra versión del escáner."
-                );
+            if (typeof ZXing === 'undefined') {
+                showError("La librería ZXing no está disponible. Verifica tu conexión.");
                 return;
             }
 
             try {
                 const videoElement = document.getElementById('video');
-                const canvas = document.getElementById('canvas');
-                const ctx = canvas.getContext('2d');
                 const scannerSection = document.getElementById('scannerSection');
                 
                 scannerSection.classList.remove('hidden');
                 document.getElementById('startScan').classList.add('hidden');
                 document.getElementById('stopScan').classList.remove('hidden');
 
-                // Solicitar acceso a cámara
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
+                // Crear reader con hints para códigos 1D
+                const hints = new Map();
+                const formats = [
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E
+                ];
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
-                videoElement.srcObject = stream;
-                await videoElement.play();
+                codeReader = new ZXing.BrowserMultiFormatReader(hints);
+                
+                const devices = await codeReader.listVideoInputDevices();
+                debugLog(`Cámaras encontradas: ${devices.length}`);
+                
+                if (devices.length === 0) {
+                    throw new Error("No se encontró ninguna cámara");
+                }
 
-                // Ajustar canvas al tamaño del video
-                canvas.width = videoElement.videoWidth;
-                canvas.height = videoElement.videoHeight;
-
-                // Crear detector con formatos 1D
-                barcodeDetector = new BarcodeDetector({
-                    formats: [
-                        'code_128',
-                        'code_39',
-                        'ean_13',
-                        'ean_8',
-                        'upc_a',
-                        'upc_e'
-                    ]
-                });
+                // Preferir cámara trasera
+                const backCamera = devices.find(device => 
+                    device.label.toLowerCase().includes('back') || 
+                    device.label.toLowerCase().includes('rear') ||
+                    device.label.toLowerCase().includes('trasera')
+                );
+                const selectedDevice = backCamera || devices[0];
 
                 isScanning = true;
-                debugLog("Escáner nativo iniciado");
 
-                // Escanear continuamente
-                scanningInterval = setInterval(async () => {
-                    if (!isScanning) return;
-
-                    try {
-                        const barcodes = await barcodeDetector.detect(videoElement);
-                        
-                        if (barcodes.length > 0) {
-                            const barcode = barcodes[0];
-                            const code = barcode.rawValue;
+                codeReader.decodeFromVideoDevice(
+                    selectedDevice.deviceId,
+                    videoElement,
+                    (result, error) => {
+                        if (result) {
+                            const code = result.getText();
                             const currentTime = Date.now();
-
-                            // Dibujar detección en canvas
-                            ctx.clearRect(0, 0, canvas.width, canvas.height);
-                            ctx.strokeStyle = '#00ff00';
-                            ctx.lineWidth = 4;
                             
-                            const { x, y, width, height } = barcode.boundingBox;
-                            ctx.strokeRect(x, y, width, height);
-
                             // Evitar lecturas duplicadas
                             if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
                                 return;
@@ -596,7 +509,7 @@
                             lastScannedCode = code;
                             lastScanTime = currentTime;
                             
-                            debugLog(`Código detectado: ${code} (${barcode.format})`);
+                            debugLog(`Código detectado: ${code}`);
                             processStudent(code);
                             
                             // Detener después de lectura exitosa
@@ -604,24 +517,14 @@
                                 stopScanner();
                             }, 500);
                         }
-                    } catch (error) {
-                        // Ignorar errores de detección individuales
                     }
-                }, 100); // Escanear cada 100ms
+                );
+
+                debugLog("Escáner ZXing iniciado");
 
             } catch (error) {
                 debugLog(`Error: ${error.message}`);
-                let errorMessage = "No se pudo acceder a la cámara. ";
-                
-                if (error.name === 'NotAllowedError') {
-                    errorMessage += "Por favor permite el acceso a la cámara.";
-                } else if (error.name === 'NotFoundError') {
-                    errorMessage += "No se encontró cámara en el dispositivo.";
-                } else {
-                    errorMessage += error.message;
-                }
-                
-                showError(errorMessage + " Usa la entrada manual.");
+                showError(`No se pudo acceder a la cámara: ${error.message}. Usa la entrada manual.`);
                 stopScanner();
             }
         }
@@ -629,30 +532,15 @@
         function stopScanner() {
             debugLog("Deteniendo escáner...");
             
-            isScanning = false;
-
-            if (scanningInterval) {
-                clearInterval(scanningInterval);
-                scanningInterval = null;
+            if (codeReader && isScanning) {
+                codeReader.reset();
+                debugLog("Escáner detenido");
             }
-
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-
-            const videoElement = document.getElementById('video');
-            videoElement.srcObject = null;
-
-            const canvas = document.getElementById('canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            isScanning = false;
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
             document.getElementById('stopScan').classList.add('hidden');
-
-            debugLog("Escáner detenido");
         }
 
         function assignManually() {
@@ -728,14 +616,8 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', async function() {
-            const isSupported = await checkBarcodeDetectorSupport();
-            
-            if (isSupported) {
-                debugLog("Sistema Barcode Detection API inicializado - API nativa soportada ✓");
-            } else {
-                debugLog("Sistema iniciado - Barcode Detection API NO soportada (solo Chrome/Edge)");
-            }
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog("Sistema ZXing inicializado");
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
