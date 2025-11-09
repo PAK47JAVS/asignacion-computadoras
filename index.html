@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asignación de Computadoras - html5-qrcode</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <title>Asignación de Computadoras - Barcode Detection API</title>
     <style>
         * {
             margin: 0;
@@ -52,12 +51,36 @@
             margin-bottom: 20px;
         }
 
-        #reader {
+        .library-tag.native {
+            background: rgba(255, 193, 7, 0.8);
+        }
+
+        #videoContainer {
+            position: relative;
             width: 100%;
             max-width: 400px;
+            height: 300px;
             margin: 20px auto;
             border-radius: 10px;
             overflow: hidden;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            border: 3px solid #fff;
+            border-radius: 10px;
+            background: #000;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
 
         .input-section {
@@ -190,6 +213,15 @@
             margin: 10px 0;
         }
 
+        .warning {
+            background: rgba(255, 193, 7, 0.8);
+            color: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 0.9rem;
+        }
+
         #studentInfo {
             font-size: 1.2rem;
             margin: 15px 0;
@@ -204,6 +236,22 @@
             justify-content: center;
             gap: 10px;
             margin: 20px 0;
+        }
+
+        .scan-indicator {
+            background: rgba(46, 213, 115, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin: 10px 0;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
         }
 
         @media (max-width: 600px) {
@@ -234,7 +282,7 @@
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
-        <div class="library-tag">📚 html5-qrcode v2.3.8</div>
+        <div class="library-tag native">⚡ Barcode Detection API (Nativa)</div>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
             🎲 ASIGNAR PC AL AZAR
@@ -247,7 +295,14 @@
             <button onclick="resetSystem()">🔄 Reiniciar Sistema</button>
         </div>
 
-        <div id="reader" class="hidden"></div>
+        <div id="scannerSection" class="hidden">
+            <div id="videoContainer">
+                <video id="video" playsinline autoplay></video>
+                <canvas id="canvas"></canvas>
+            </div>
+            <div class="scan-indicator">🔍 ESCANEANDO...</div>
+            <p>Enfoca el código de barras del carné estudiantil</p>
+        </div>
 
         <div class="input-section">
             <h3>O ingresa tu número estudiantil:</h3>
@@ -273,8 +328,10 @@
 
         // Variables del sistema
         let assignedStudents = {};
-        let html5QrcodeScanner = null;
+        let stream = null;
+        let barcodeDetector = null;
         let isScanning = false;
+        let scanningInterval = null;
         let resultTimeout = null;
         let lastScannedCode = null;
         let lastScanTime = 0;
@@ -396,6 +453,23 @@
             }, 3000);
         }
 
+        function showWarning(message) {
+            const resultDiv = document.getElementById('result');
+            
+            if (resultTimeout) {
+                clearTimeout(resultTimeout);
+                resultTimeout = null;
+            }
+            
+            resultDiv.innerHTML = `<div class="warning">${message}</div>`;
+            resultDiv.classList.remove('hidden');
+            
+            resultTimeout = setTimeout(() => {
+                resultDiv.classList.add('hidden');
+                resultTimeout = null;
+            }, 7000);
+        }
+
         function processStudent(studentId) {
             try {
                 studentId = studentId.toString().trim();
@@ -422,86 +496,163 @@
             }
         }
 
-        function startScanner() {
-            debugLog("Iniciando escáner html5-qrcode...");
+        async function checkBarcodeDetectorSupport() {
+            if (!('BarcodeDetector' in window)) {
+                debugLog("Barcode Detection API no soportada");
+                return false;
+            }
+
+            try {
+                const formats = await BarcodeDetector.getSupportedFormats();
+                debugLog(`Formatos soportados: ${formats.join(', ')}`);
+                return formats.length > 0;
+            } catch (error) {
+                debugLog(`Error verificando soporte: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function startScanner() {
+            debugLog("Iniciando escáner nativo...");
+
+            // Verificar soporte
+            const isSupported = await checkBarcodeDetectorSupport();
             
-            if (typeof Html5Qrcode === 'undefined') {
-                showError("La librería html5-qrcode no está disponible. Verifica tu conexión.");
+            if (!isSupported) {
+                showWarning(
+                    "⚠️ Tu navegador no soporta la Barcode Detection API nativa. " +
+                    "Esta API solo funciona en Chrome/Edge (v83+). " +
+                    "Por favor usa la entrada manual o prueba con otra versión del escáner."
+                );
                 return;
             }
 
-            const readerDiv = document.getElementById('reader');
-            readerDiv.classList.remove('hidden');
-            
-            document.getElementById('startScan').classList.add('hidden');
-            document.getElementById('stopScan').classList.remove('hidden');
+            try {
+                const videoElement = document.getElementById('video');
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+                const scannerSection = document.getElementById('scannerSection');
+                
+                scannerSection.classList.remove('hidden');
+                document.getElementById('startScan').classList.add('hidden');
+                document.getElementById('stopScan').classList.remove('hidden');
 
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 150 },
-                aspectRatio: 1.777778,
-                formatsToSupport: [
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.EAN_8,
-                    Html5QrcodeSupportedFormats.UPC_A,
-                    Html5QrcodeSupportedFormats.UPC_E
-                ]
-            };
-
-            html5QrcodeScanner = new Html5Qrcode("reader");
-
-            html5QrcodeScanner.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText, decodedResult) => {
-                    const currentTime = Date.now();
-                    
-                    // Evitar lecturas duplicadas
-                    if (decodedText === lastScannedCode && (currentTime - lastScanTime) < 2000) {
-                        return;
+                // Solicitar acceso a cámara
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     }
-                    
-                    lastScannedCode = decodedText;
-                    lastScanTime = currentTime;
-                    
-                    debugLog(`Código detectado: ${decodedText}`);
-                    processStudent(decodedText);
-                    
-                    // Detener escáner después de lectura exitosa
-                    setTimeout(() => {
-                        stopScanner();
-                    }, 500);
-                },
-                (errorMessage) => {
-                    // Ignorar errores de escaneo normal
-                }
-            ).catch((err) => {
-                debugLog(`Error iniciando escáner: ${err}`);
-                showError("No se pudo acceder a la cámara. Usa la entrada manual.");
-                stopScanner();
-            });
+                });
 
-            isScanning = true;
+                videoElement.srcObject = stream;
+                await videoElement.play();
+
+                // Ajustar canvas al tamaño del video
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+
+                // Crear detector con formatos 1D
+                barcodeDetector = new BarcodeDetector({
+                    formats: [
+                        'code_128',
+                        'code_39',
+                        'ean_13',
+                        'ean_8',
+                        'upc_a',
+                        'upc_e'
+                    ]
+                });
+
+                isScanning = true;
+                debugLog("Escáner nativo iniciado");
+
+                // Escanear continuamente
+                scanningInterval = setInterval(async () => {
+                    if (!isScanning) return;
+
+                    try {
+                        const barcodes = await barcodeDetector.detect(videoElement);
+                        
+                        if (barcodes.length > 0) {
+                            const barcode = barcodes[0];
+                            const code = barcode.rawValue;
+                            const currentTime = Date.now();
+
+                            // Dibujar detección en canvas
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.strokeStyle = '#00ff00';
+                            ctx.lineWidth = 4;
+                            
+                            const { x, y, width, height } = barcode.boundingBox;
+                            ctx.strokeRect(x, y, width, height);
+
+                            // Evitar lecturas duplicadas
+                            if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
+                                return;
+                            }
+                            
+                            lastScannedCode = code;
+                            lastScanTime = currentTime;
+                            
+                            debugLog(`Código detectado: ${code} (${barcode.format})`);
+                            processStudent(code);
+                            
+                            // Detener después de lectura exitosa
+                            setTimeout(() => {
+                                stopScanner();
+                            }, 500);
+                        }
+                    } catch (error) {
+                        // Ignorar errores de detección individuales
+                    }
+                }, 100); // Escanear cada 100ms
+
+            } catch (error) {
+                debugLog(`Error: ${error.message}`);
+                let errorMessage = "No se pudo acceder a la cámara. ";
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += "Por favor permite el acceso a la cámara.";
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage += "No se encontró cámara en el dispositivo.";
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                showError(errorMessage + " Usa la entrada manual.");
+                stopScanner();
+            }
         }
 
         function stopScanner() {
             debugLog("Deteniendo escáner...");
             
-            if (html5QrcodeScanner && isScanning) {
-                html5QrcodeScanner.stop().then(() => {
-                    html5QrcodeScanner.clear();
-                    debugLog("Escáner detenido");
-                }).catch((err) => {
-                    debugLog(`Error deteniendo escáner: ${err}`);
-                });
-            }
-            
             isScanning = false;
-            document.getElementById('reader').classList.add('hidden');
+
+            if (scanningInterval) {
+                clearInterval(scanningInterval);
+                scanningInterval = null;
+            }
+
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+
+            const videoElement = document.getElementById('video');
+            videoElement.srcObject = null;
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('startScan').classList.remove('hidden');
             document.getElementById('stopScan').classList.add('hidden');
+
+            debugLog("Escáner detenido");
         }
 
         function assignManually() {
@@ -577,8 +728,14 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            debugLog("Sistema html5-qrcode inicializado");
+        document.addEventListener('DOMContentLoaded', async function() {
+            const isSupported = await checkBarcodeDetectorSupport();
+            
+            if (isSupported) {
+                debugLog("Sistema Barcode Detection API inicializado - API nativa soportada ✓");
+            } else {
+                debugLog("Sistema iniciado - Barcode Detection API NO soportada (solo Chrome/Edge)");
+            }
             
             document.getElementById('manualInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
