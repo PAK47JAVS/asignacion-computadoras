@@ -282,7 +282,7 @@
 <body>
     <div class="container">
         <h1>🖥️ Asignación de Computadoras</h1>
-        <div class="library-tag native">⚡ Barcode Detection API (Nativa)</div>
+        <div class="library-tag native">⚡ Barcode Detection API - MODO ULTRA RÁPIDO</div>
         
         <button class="big-assign-button" onclick="assignRandomStudent()">
             🎲 ASIGNAR PORTATIL
@@ -292,7 +292,7 @@
             <button id="startScan" onclick="startScanner()">📱 Iniciar Escáner</button>
             <button id="stopScan" onclick="stopScanner()" class="hidden">⏹️ Detener Escáner</button>
             <button onclick="showStatus()">📊 Ver Estado</button>
-            <button onclick="resetSystem()">🔄 Reiniciar</button>
+            <button onclick="resetSystem()">🔄 Reiniciar Asignaciones</button>
         </div>
 
         <div id="scannerSection" class="hidden">
@@ -300,8 +300,11 @@
                 <video id="video" playsinline autoplay></video>
                 <canvas id="canvas"></canvas>
             </div>
-            <div class="scan-indicator">🔍 ESCANEANDO...</div>
-            <p>Enfoca el código de barras del carné estudiantil</p>
+            <div class="scan-indicator">⚡ MODO ULTRA SENSIBLE - ESCANEO RÁPIDO</div>
+            <p>Acerca el código de barras del carné estudiantil</p>
+            <p style="font-size: 0.85rem; opacity: 0.9; margin-top: 5px;">
+                ⚡ Detección instantánea activada - No se requiere precisión perfecta
+            </p>
         </div>
 
         <div class="input-section">
@@ -474,12 +477,16 @@
             try {
                 studentId = studentId.toString().trim();
                 
+                // MODO ALTA SENSIBILIDAD: Aceptar cualquier código sin validación estricta
                 if (!studentId || studentId.length === 0) {
-                    throw new Error("Número de estudiante no válido");
+                    debugLog("⚠️ Código vacío ignorado");
+                    return; // Solo ignorar vacíos, no mostrar error
                 }
 
-                if (studentId.length > 50) {
-                    throw new Error("Número de estudiante demasiado largo");
+                // Permitir códigos largos sin restricción
+                if (studentId.length > 100) {
+                    debugLog("⚠️ Código muy largo, truncando...");
+                    studentId = studentId.substring(0, 100);
                 }
 
                 if (assignedStudents[studentId]) {
@@ -492,7 +499,8 @@
                 
             } catch (error) {
                 debugLog(`Error: ${error.message}`);
-                showError(error.message);
+                // En modo sensible, no mostrar errores al usuario para no interrumpir
+                console.error(error);
             }
         }
 
@@ -566,16 +574,19 @@
                 });
 
                 isScanning = true;
-                debugLog("Escáner nativo iniciado");
+                debugLog("⚡ Escáner ULTRA SENSIBLE iniciado - Modo rápido activado");
+                debugLog("📊 Frecuencia: 50ms | Debounce: 1s | Detección: INMEDIATA");
 
-                // Escanear continuamente
+                // Escanear continuamente con alta sensibilidad
                 scanningInterval = setInterval(async () => {
                     if (!isScanning) return;
 
                     try {
                         const barcodes = await barcodeDetector.detect(videoElement);
                         
+                        // MODO ALTA SENSIBILIDAD: Procesar INMEDIATAMENTE cualquier detección
                         if (barcodes.length > 0) {
+                            // Tomar el primer código detectado sin validación estricta
                             const barcode = barcodes[0];
                             const code = barcode.rawValue;
                             const currentTime = Date.now();
@@ -588,26 +599,28 @@
                             const { x, y, width, height } = barcode.boundingBox;
                             ctx.strokeRect(x, y, width, height);
 
-                            // Evitar lecturas duplicadas
-                            if (code === lastScannedCode && (currentTime - lastScanTime) < 2000) {
+                            // Reducir tiempo de debounce a 1 segundo (más permisivo)
+                            if (code === lastScannedCode && (currentTime - lastScanTime) < 1000) {
                                 return;
                             }
                             
                             lastScannedCode = code;
                             lastScanTime = currentTime;
                             
-                            debugLog(`Código detectado: ${code} (${barcode.format})`);
+                            debugLog(`✓ Código detectado INMEDIATAMENTE: ${code} (${barcode.format})`);
+                            
+                            // Procesar INMEDIATAMENTE sin esperar
                             processStudent(code);
                             
-                            // Detener después de lectura exitosa
+                            // Detener después de lectura exitosa (más rápido)
                             setTimeout(() => {
                                 stopScanner();
-                            }, 500);
+                            }, 300);
                         }
                     } catch (error) {
                         // Ignorar errores de detección individuales
                     }
-                }, 100); // Escanear cada 100ms
+                }, 50); // Escanear cada 50ms (más frecuente = más rápido)
 
             } catch (error) {
                 debugLog(`Error: ${error.message}`);
